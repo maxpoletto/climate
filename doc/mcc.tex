@@ -1,12 +1,13 @@
 \documentclass[11pt]{article}
+\usepackage{amsmath}
 \usepackage[margin=1in, top=0.5in, bottom=0.5in]{geometry}
 \usepackage{libertine}
 \usepackage{tikz}
 \pagenumbering{gobble}
 
 \title{{\em Modern Climate Change}: a cheat-sheet}
-\begin{document}
 \date{}
+\begin{document}
 \maketitle
 
 \section{Introduction}
@@ -50,12 +51,12 @@ Climate data prior to the instrumental record can be obtained from several {\em 
     \item The chemical composition and crystal structure of ice cores.
     \item The chemical composition of air bubbles trapped in ice cores.
     \item Tree rings. (Trees grow more in warm climates.)
-    \item Ocean sediments, and in particular the prevalance of different species and the chemical
-        composition of the fossils.
+    \item Ocean sediments, in particular the prevalance of different species and the chemical
+        composition of  fossils.
 \end{itemize}
 
-In the last 400M years Earth has alternated between "icehouse" and "greenhouse" states.
-During icehouse phases, ice has reached south to $30^\circ$ latitude. During greenhouse phases,
+In the last 400M years Earth has alternated between ``icehouse'' and ``greenhouse'' states.
+During icehouse phases, ice has extended to $30^\circ$ latitude. During greenhouse phases,
 ice disappeared from the poles.
 
 The last greenhouse phase ended about 35M years ago. The peak temperature occurred about 55M years ago,
@@ -73,6 +74,41 @@ Cooling took a long time (tens of thousands of years) but warming was rapid (abo
 Atmospheric CO$_2$ concentration in ice cores tracks temperature changes closely.
 
 \section{Radiation and energy balance}
+
+A black body is an (idealized) object that absorbs all radiation that hits it.
+It also emits radiation at a rate that depends on its temperature.
+
+The relationship between the temperature of a black body and the peak of its emission spectrum is
+given by Wien's law:
+\[
+\lambda_{\text{max}} = \frac{b}{T}
+\]
+where $\lambda_{\text{max}}$ is the wavelength of the peak emission ($\mu$m), $b$ is Wien's constant (2897 $\mu$m$\cdot$K),
+and $T$ is the temperature (K). Since wavelength and frequency are inversely related, the frequency of the peak emission
+increases with temperature. Visible light has wavelengths between 0.4 and 0.8 $\mu$m.
+Some examples:
+\begin{itemize}
+    \item A 1600 K object emits most of its radiation as infrared light but some of its radiation is in the red end of the visible spectrum,
+        so it glows ``red hot''.
+    \item An incandescent filament has a temperature of 3000K and emits most of its radiation in the infrared spectrum but more of it is in the visible spectrum.
+    \item The Sun has a temperature of 6800 K and most of its radiation is in the visible spectrum.
+\end{itemize}
+
+The Stefan-Boltzmann law describes the relationship between the temperature of a black body
+and the rate at which it emits radiation:
+\[
+P/a = \sigma T^4
+\]
+where $P$ is the rate of radiation emission (W), a is the surface area (m$^2$), $T$ is the temperature of the black body (K),
+and $\sigma$ is the Stefan-Boltzmann constant, $5.67 \times 10^{-8}$ W/m$^2$K$^4$.
+
+The net change in internal energy of an object is given by the difference between the energy it absorbs and the energy it emits:
+\[
+\Delta U = E_{\text{in}} - E_{\text{out}}
+\]
+where $E_{\text{in}}$ is the energy absorbed and $E_{\text{out}}$ is the energy emitted.
+
+
 
 \section{Simple climate models}
 \[
