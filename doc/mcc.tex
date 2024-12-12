@@ -90,7 +90,7 @@ Some examples:
 \begin{itemize}
     \item A 1600 K object emits most of its radiation as infrared light but some of its radiation is in the red end of the visible spectrum,
         so it glows ``red hot''.
-    \item An incandescent filament has a temperature of 3000K and emits most of its radiation in the infrared spectrum but more of it is in the visible spectrum.
+    \item An incandescent filament has a temperature of 3000 K and emits most of its radiation in the infrared spectrum but more of it is in the visible spectrum.
     \item The Sun has a temperature of 6800 K and most of its radiation is in the visible spectrum.
 \end{itemize}
 
@@ -108,9 +108,24 @@ The net change in internal energy of an object is given by the difference betwee
 \]
 where $E_{\text{in}}$ is the energy absorbed and $E_{\text{out}}$ is the energy emitted.
 
-
-
 \section{Simple climate models}
+
+The sun emits a total energy of $3.8 \times 10^{26}$ W.
+Dividing this by the surface area of a sphere with radius $D$ equal to the distance between the Earth and the Sun (1.5 $\times 10^{11}$ m),
+we obtain a power intensity of $S = 1360$ W/m$^2$ at the Earth's distance from the Sun. $S$ is called the solar constant.
+
+The Earth's {\em albedo} is its reflectivity, the fraction of solar radiation that it reflects.
+
+Then if we let $R$ be the radius of the Earth, the amount of energy absorbed by the Earth is
+\[
+E_{\text{in}} = S(1-\alpha)\pi R^2
+\]
+
+To obtain the average amount of energy per unit area, we divide by the surface area of the Earth:
+\[
+E_{\text{in}} = \frac{S(1-\alpha)\pi R^2}{4\pi R^2} = \frac{S(1-\alpha)}{4}
+\]
+
 \[
 T = \sqrt[4]{\frac{(n+1)S(1-\alpha)}{4 \sigma}}
 \]
