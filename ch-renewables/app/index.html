@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <title>Swiss Energy Facilities Map</title>
-    <script src='https://unpkg.com/maplibre-gl@5.0.1/dist/maplibre-gl.js'></script>
-    <link href='https://unpkg.com/maplibre-gl@5.0.1/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
+    <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
     <style>
         body { margin: 0; padding: 0; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
@@ -33,23 +35,34 @@
                oninput="this.nextElementSibling.value = Math.pow(10, this.value).toFixed()">
             <output id="powerThresh" style="font-family: monospace; text-align: right; min-width: 5em; display: inline-block;">1</output>
         </div>
-
     </div>
 
     <script>
+        const {Deck, ScatterplotLayer, BitmapLayer, TileLayer} = deck;  // Destructure what we need
+
+        const MAPTILER_KEY = 'HtGwidy8WklIVYnFKMJk';
         let facilities = [];
+        let deckgl;
 
-        const map = new maplibregl.Map({
-            container: 'map',
-            style: 'https://demotiles.maplibre.org/style.json',
-            //style: 'https://raw.githubusercontent.com/openmaptiles/terrain-style/master/style.json',
-            //style: 'https://raw.githubusercontent.com/openmaptiles/maptiler-basic-gl-style/refs/heads/master/style.json?key=HtGwidy8WklIVYnFKMJk',
-            //style: 'https://api.maptiler.com/maps/terrain/style.json?key=HtGwidy8WklIVYnFKMJk',
-            // style: 'https://api.maptiler.com/tiles/hillshade/tiles.json?key=HtGwidy8WklIVYnFKMJk',
-            center: [8.2275, 46.8182], // Center of Switzerland
-            zoom: 8
-        });
-
+        function initialize() {
+            maptilersdk.config.apiKey = MAPTILER_KEY;
+            deckgl = new deck.DeckGL({
+                container: 'map',
+                map: maptilersdk,
+                mapStyle: maptilersdk.MapStyle.BASIC,
+                initialViewState: {
+                    longitude: 8.2275,
+                    latitude: 46.8182,
+                    zoom: 8,
+                    pitch: 0,
+                    bearing: 0
+                },
+                controller: true,
+                layers: []
+            });
+            
+            loadData();
+        }
         async function loadData() {
             const response = await fetch('ElectricityProductionPlant.json');
             facilities = await response.json();
@@ -66,56 +79,39 @@
 
             updateMap();
         }
-
         function updateMap() {
             const category = document.getElementById('categoryFilter').value;
             const minPower = parseFloat(document.getElementById('powerThresh').value) || 0;
 
-            // Filter facilities
             const filtered = facilities.filter(f => 
                 (category === 'all' || f.SubCategory === category) &&
                 (f.TotalPower >= minPower)
             );
 
-            // Remove existing layers if they exist
-            if (map.getLayer('facilities')) map.removeLayer('facilities');
-            if (map.getSource('facilities')) map.removeSource('facilities');
-
-            // Add new data
-            map.addSource('facilities', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: filtered.map(f => ({
-                        type: 'Feature',
-                        geometry: {
-                            type: 'Point',
-                            coordinates: [f.lon, f.lat]
-                        },
-                        properties: f
-                    }))
-                }
-            });
-
-            map.addLayer({
-                id: 'facilities',
-                type: 'circle',
-                source: 'facilities',
-                paint: {
-                    'circle-radius': [
-                        'interpolate', ['linear'], ['zoom'],
-                        7, 2,   // at zoom 7, radius is 2px
-                        16, 32   // at zoom 16, radius is 8px
-                    ],
-                    'circle-color': '#FEEBC8',
-                    'circle-opacity': 0.6
-                }
-            });
-        }
-
-        map.on('load', loadData);
-        document.getElementById('categoryFilter').onchange = updateMap;
-        document.getElementById('powerFilter').onchange = updateMap;
+            deckgl.setProps(
+                {layers: [
+                    new ScatterplotLayer({
+                        id: 'facilities',
+                        data: filtered,
+                        getPosition: d => [d.lon, d.lat],
+                        getFillColor: [254, 235, 200],
+                        getRadius: 10, //d => Math.log(d.TotalPower + 1) * 20,
+                        opacity: 0.6,
+                        pickable: true,
+                        onClick: info => {
+                            if (info.object) {
+                                console.log(info.object);
+                            }
+                        }
+                    })
+                ]}
+                )
+        }            
+        // Initialize
+        initialize();
+        //document.getElementById('categoryFilter').onchange = updateMap;
+        //document.getElementById('powerFilter').onchange = updateMap;
     </script>
+
 </body>
 </html>
