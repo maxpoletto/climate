@@ -6,6 +6,8 @@
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
     <style>
         html, body {margin: 0; height: 100%; overflow: hidden}
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -104,6 +106,8 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            padding-left: 20px;
+            padding-right: 20px;
         }
         .power-values {
             display: flex;
@@ -148,6 +152,37 @@
                 font-size: 10px;
             }
         }
+        #powerRangeSlider {
+            margin: 15px 0;
+        }
+        /* noUiSlider customizations */
+        .noUi-target {
+            background: #e0e0e0;
+            border-radius: 8px;
+            border: none;
+            box-shadow: none;
+            height: 8px;
+        }
+        .noUi-connect {
+            background: #2196F3;
+        }
+        .noUi-handle {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #2196F3;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            cursor: grab;
+            top: -6px;
+        }
+        .noUi-handle:active {
+            cursor: grabbing;
+        }
+        .noUi-handle:before,
+        .noUi-handle:after {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -176,12 +211,12 @@
             </table>
         </div>
         <div class="control-section">
-            <h3>Minimum Power: <span id="currentPower">0.1 kW</span></h3>
+            <h3>Power Range: <span id="currentPowerRange">0.1 kW - 2 GW</span></h3>
             <div class="power-control">
-                <input type="range" id="powerFilter" min="0" max="7" step="0.1" value="0">
+                <div id="powerRangeSlider"></div>
                 <div class="power-values">
                     <span>0.1 kW</span>
-                    <span>1M kW</span>
+                    <span>2 GW</span>
                 </div>
             </div>
         </div>
@@ -250,6 +285,7 @@
                 const response = await fetch('ElectricityProductionPlant.json');
                 facilities = await response.json();
                 
+                initializePowerSlider();
                 setupCategoryCheckboxes();
                 setupEventListeners();
                 updateMap();
@@ -259,6 +295,19 @@
                 console.error('Error loading data:', error);
                 document.getElementById('facilityCount').textContent = 'Error loading data';
             }
+        }
+
+        function initializePowerSlider() {
+            const powerRangeSlider = document.getElementById('powerRangeSlider');
+            noUiSlider.create(powerRangeSlider, {
+                start: [0, 7.3], // Start at min (0.1 kW) and max (2 GW)
+                connect: true,
+                range: {
+                    'min': 0,
+                    'max': 7.3
+                },
+                step: 0.1
+            });
         }
 
         function setupCategoryCheckboxes() {
@@ -317,12 +366,14 @@
 
         function updateCategoryStats() {
             const minPower = getCurrentMinPower();
+            const maxPower = getCurrentMaxPower();
             const categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
             
             categories.forEach(category => {
                 const filteredFacilities = facilities.filter(f => 
                     f.SubCategory === category && 
                     f.TotalPower >= minPower &&
+                    f.TotalPower <= maxPower &&
                     f.lat && f.lon
                 );
                 
@@ -342,10 +393,12 @@
         function updateTotals() {
             const selectedCategories = getSelectedCategories();
             const minPower = getCurrentMinPower();
+            const maxPower = getCurrentMaxPower();
             
             const selectedFacilities = facilities.filter(f => 
                 selectedCategories.includes(f.SubCategory) &&
                 f.TotalPower >= minPower &&
+                f.TotalPower <= maxPower &&
                 f.lat && f.lon
             );
             
@@ -365,20 +418,29 @@
                 }
             });
             
-            // Power slider
-            const powerSlider = document.getElementById('powerFilter');
-            powerSlider.addEventListener('input', function() {
-                const logValue = Math.pow(10, parseFloat(this.value) - 1);
-                const displayValue = logValue < 1000 
-                    ? `${logValue.toFixed(1)} kW`
-                    : `${(logValue / 1000).toFixed(1)}M kW`;
-                document.getElementById('currentPower').textContent = displayValue;
-                updateCategoryStats(); // This will also call updateTotals() and updateMap()
+            // Power range slider events
+            const powerRangeSlider = document.getElementById('powerRangeSlider');
+            powerRangeSlider.noUiSlider.on('update', function(values) {
+                const minPower = Math.pow(10, values[0] - 1);
+                const maxPower = Math.pow(10, values[1] - 1);
+                
+                function formatPower(power) {
+                    if (power >= 1000000) {
+                        return `${(power / 1000000).toFixed(1)} GW`;
+                    } else if (power >= 1000) {
+                        return `${(power / 1000).toFixed(1)} MW`;
+                    } else {
+                        return `${power.toFixed(1)} kW`;
+                    }
+                }
+                
+                const minDisplay = formatPower(minPower);
+                const maxDisplay = formatPower(maxPower);
+                
+                document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
+                updateCategoryStats();
                 updateMap();
             });
-            
-            // Initial power display
-            powerSlider.dispatchEvent(new Event('input'));
         }
 
         function getSelectedCategories() {
@@ -387,17 +449,26 @@
         }
 
         function getCurrentMinPower() {
-            const sliderValue = parseFloat(document.getElementById('powerFilter').value);
-            return Math.pow(10, sliderValue - 1); // -1 to start from 0.1 instead of 1
+            const slider = document.getElementById('powerRangeSlider');
+            const values = slider.noUiSlider.get();
+            return Math.pow(10, values[0] - 1); // -1 to start from 0.1 instead of 1
+        }
+
+        function getCurrentMaxPower() {
+            const slider = document.getElementById('powerRangeSlider');
+            const values = slider.noUiSlider.get();
+            return Math.pow(10, values[1] - 1); // -1 to start from 0.1 instead of 1
         }
 
         function updateMap() {
             const selectedCategories = getSelectedCategories();
             const minPower = getCurrentMinPower();
+            const maxPower = getCurrentMaxPower();
 
             const filtered = facilities.filter(f => 
                 selectedCategories.includes(f.SubCategory) &&
                 f.TotalPower >= minPower &&
+                f.TotalPower <= maxPower &&
                 f.lat && f.lon // Ensure coordinates exist
             );
 
@@ -413,7 +484,7 @@
                 radiusMaxPixels: 100,
                 updateTriggers: {
                     getFillColor: selectedCategories,
-                    getRadius: minPower
+                    getRadius: [minPower, maxPower]
                 }
             });
 
