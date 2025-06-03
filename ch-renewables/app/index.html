@@ -255,6 +255,95 @@
         .noUi-handle:after {
             display: none;
         }
+        .info-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #2196F3;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s;
+        }
+        .info-button:hover {
+            background: #1976D2;
+        }
+        .info-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .info-modal.show {
+            display: flex;
+        }
+        .info-modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            position: relative;
+        }
+        .info-modal h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 18px;
+        }
+        .info-modal h4 {
+            margin: 15px 0 8px 0;
+            color: #555;
+            font-size: 14px;
+        }
+        .info-modal p, .info-modal li {
+            font-size: 13px;
+            line-height: 1.4;
+            color: #666;
+            margin: 8px 0;
+        }
+        .info-modal ul {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+        .info-modal a {
+            color: #2196F3;
+            text-decoration: none;
+        }
+        .info-modal a:hover {
+            text-decoration: underline;
+        }
+        .close-modal {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            line-height: 1;
+        }
+        .close-modal:hover {
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -262,12 +351,13 @@
         <div class="loading-content">
             <div class="loading-spinner"></div>
             <h3>Loading Swiss Energy Facilities</h3>
-            <p>Fetching data for 267,000+ facilities...</p>
+            <p>Fetching data for 290,000+ facilities...</p>
         </div>
     </div>
 
     <div id="map"></div>
     <div id="controls">
+        <button class="info-button" id="infoButton">i</button>
         <div class="control-section">
             <h3>Energy Facilities</h3>
             <table id="categoryTable" class="category-table">
@@ -301,6 +391,37 @@
             </div>
         </div>
         <div class="facility-count" id="facilityCount">Loading...</div>
+    </div>
+
+    <div class="info-modal" id="infoModal">
+        <div class="info-modal-content">
+            <button class="close-modal" id="closeModal">&times;</button>
+            <h3>Swiss Energy Facilities Map</h3>
+
+            <h4>Instructions</h4>
+            <ul>
+                <li><strong>Energy facilities table:</strong> Check/uncheck energy sources to show/hide them on the map. View real-time facility counts and total capacity (MW) for each type.</li>
+                <li><strong>Power range slider:</strong> Drag the handles to filter facilities by their power output.</li>
+                <li><strong>Map:</strong> Mouse wheel / pinch to zoom, click+drag / tap+drag to pan, Shift+drag to change rotation and tilt. Hover over any facility for details.</li>
+            </ul>
+
+            <h4>About the data</h4>
+            <p>This dataset contains all operational electricity production facilities registered in the Swiss Certificate of Origin system, including:</p>
+            <ul>
+                <li>All facilities with capacity greater than 30 kVA.</li>
+                <li>Smaller facilities (>2 kW) voluntarily registered for certificates.</li>
+                <li>Facilities subsidized via feed-in tariffs, one-time payments, or investment contributions pursuant to the 2021 Swiss Energy Act.</li>
+            </ul>
+
+            <h4>Data sources</h4>
+            <p><strong>Swiss Federal Office of Energy (BFE):</strong><br>
+            <a href="https://www.bfe.admin.ch/bfe/de/home/versorgung/digitalisierung-und-geoinformation/geoinformation/geodaten/produktionsanlagen/elektrizitaetsproduktionsanlagen.html" target="_blank">Electricity Production Facilities Documentation</a></p>
+
+            <p><strong>Open Government Data Portal:</strong><br>
+            <a href="https://opendata.swiss/de/dataset/elektrizitatsproduktionsanlagen/resource/3a10b118-2382-4fc1-9571-e61d0294778e" target="_blank">Dataset Download (CSV)</a></p>
+
+            <p style="margin-top: 20px; font-size: 11px; color: #999;">Data updated regularly by the Swiss Federal Office of Energy. Some facilities lack GPS coordinates and are excluded from the map display.</p>
+        </div>
     </div>
 
     <script>
@@ -515,7 +636,7 @@
             
             // Power range slider events
             const powerRangeSlider = document.getElementById('powerRangeSlider');
-            powerRangeSlider.noUiSlider.on('update', function(values) {
+            powerRangeSlider.noUiSlider.on('update', function(values, handle) {
                 const minPower = Math.pow(10, values[0] - 1);
                 const maxPower = Math.pow(10, values[1] - 1);
                 
@@ -585,7 +706,34 @@
                 `</span>`;
         }
 
-        // Initialize the application
+        // Info modal functionality
+        const infoButton = document.getElementById('infoButton');
+        const infoModal = document.getElementById('infoModal');
+        const closeModal = document.getElementById('closeModal');
+
+        infoButton.addEventListener('click', () => {
+            infoModal.classList.add('show');
+        });
+
+        closeModal.addEventListener('click', () => {
+            infoModal.classList.remove('show');
+        });
+
+        // Close modal when clicking outside
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.classList.remove('show');
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
+                infoModal.classList.remove('show');
+            }
+        });
+
+        // Initialize everything once data loads
         initialize();
     </script>
 </body>
