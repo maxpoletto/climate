@@ -1,6 +1,7 @@
-<!DOCTYPE html lang="en" enctype="utf-8">
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <title>Swiss Energy Facilities Map</title>
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
@@ -257,8 +258,8 @@
         }
         .info-button {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 5px;
+            left: 5px;
             width: 20px;
             height: 20px;
             border-radius: 50%;
@@ -350,7 +351,8 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            width: 100%;
+            left: 0;
+            right: 310px; /* Leave space for controls panel */
             background: white;
             overflow: hidden;
         }
@@ -373,6 +375,30 @@
         }
         #tableControls {
             font-size: 14px;
+            color: #666;
+        }
+        #paginationControls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #paginationControls button {
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #paginationControls button:hover:not(:disabled) {
+            background: #f0f0f0;
+        }
+        #paginationControls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #pageInfo {
+            font-size: 12px;
             color: #666;
         }
         #tableWrapper {
@@ -483,6 +509,11 @@
                 <h3>Energy Facilities Table</h3>
                 <div id="tableControls">
                     <span id="tableCount">Showing 0 facilities</span>
+                    <div id="paginationControls" style="margin-top: 8px;">
+                        <button id="prevPage" disabled>← Previous</button>
+                        <span id="pageInfo">Page 1 of 1</span>
+                        <button id="nextPage" disabled>Next →</button>
+                    </div>
                 </div>
             </div>
             <div id="tableWrapper">
@@ -605,6 +636,8 @@
         let isTableView = false;
         let currentSort = { column: null, direction: 'asc' };
         let displayedFacilities = [];    // Currently displayed facilities in table
+        let currentPage = 1;
+        let facilitiesPerPage = 50;      // Show 50 facilities per page
 
         // Color palette for different categories
         const CATEGORY_COLORS = {
@@ -784,6 +817,7 @@
 
             setupViewToggle();
             setupTableSorting();
+            setupPagination();
         }
 
         function setupViewToggle() {
@@ -816,6 +850,25 @@
                     const column = header.dataset.sort;
                     sortTable(column);
                 });
+            });
+        }
+
+        function setupPagination() {
+            document.getElementById('prevPage').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderTable();
+                    updatePaginationControls();
+                }
+            });
+            
+            document.getElementById('nextPage').addEventListener('click', () => {
+                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderTable();
+                    updatePaginationControls();
+                }
             });
         }
 
@@ -859,7 +912,10 @@
                 }
             });
 
+            // Reset to first page after sorting
+            currentPage = 1;
             renderTable();
+            updatePaginationControls();
         }
 
         function updateTable() {
@@ -868,11 +924,15 @@
             // Use the same filtered facilities as the map
             displayedFacilities = [...filteredFacilities];
             
+            // Reset to first page when data changes
+            currentPage = 1;
+            
             // Apply current sort if any
             if (currentSort.column) {
                 sortTable(currentSort.column);
             } else {
                 renderTable();
+                updatePaginationControls();
             }
             
             // Update count
@@ -884,10 +944,12 @@
             const tbody = document.getElementById('facilitiesTableBody');
             tbody.innerHTML = '';
 
-            // For performance, limit to first 1000 rows if more than that
-            const rowsToShow = displayedFacilities.slice(0, 1000);
+            // Calculate pagination
+            const startIndex = (currentPage - 1) * facilitiesPerPage;
+            const endIndex = Math.min(startIndex + facilitiesPerPage, displayedFacilities.length);
+            const facilitiesToShow = displayedFacilities.slice(startIndex, endIndex);
             
-            rowsToShow.forEach(facility => {
+            facilitiesToShow.forEach(facility => {
                 const row = document.createElement('tr');
                 
                 // Energy Source with color indicator
@@ -934,20 +996,20 @@
                 row.appendChild(gpsCell);
                 tbody.appendChild(row);
             });
+        }
 
-            // Show truncation message if needed
-            if (displayedFacilities.length > 1000) {
-                const messageRow = document.createElement('tr');
-                const messageCell = document.createElement('td');
-                messageCell.colSpan = 6;
-                messageCell.style.textAlign = 'center';
-                messageCell.style.fontStyle = 'italic';
-                messageCell.style.color = '#666';
-                messageCell.style.padding = '20px';
-                messageCell.textContent = `Showing first 1,000 of ${displayedFacilities.length.toLocaleString()} facilities for performance. Use filters to narrow results.`;
-                messageRow.appendChild(messageCell);
-                tbody.appendChild(messageRow);
-            }
+        function updatePaginationControls() {
+            const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+            const startIndex = (currentPage - 1) * facilitiesPerPage + 1;
+            const endIndex = Math.min(currentPage * facilitiesPerPage, displayedFacilities.length);
+            
+            // Update page info
+            document.getElementById('pageInfo').textContent = 
+                `Page ${currentPage} of ${totalPages} (${startIndex}-${endIndex} of ${displayedFacilities.length.toLocaleString()})`;
+            
+            // Update button states
+            document.getElementById('prevPage').disabled = currentPage <= 1;
+            document.getElementById('nextPage').disabled = currentPage >= totalPages;
         }
 
         function updateCategoriesAndTotals() {
