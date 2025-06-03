@@ -425,17 +425,22 @@
     </div>
 
     <script>
-        const {Deck, ScatterplotLayer} = deck;
-
         const MAPTILER_KEY = 'HtGwidy8WklIVYnFKMJk';
-        let facilities = [];
-        let facilitiesWithCoords = [];
-        let filteredFacilities = [];
-        let deckgl;
+        const {Deck, ScatterplotLayer} = deck;
+        let deckgl; // DeckGL instance.
 
-        // Color palette for different subcategories
+        let facilities = [];             // All power facilities.
+        let numFacilitiesWithCoords = 0; // Number of facilities with GPS coordinates
+        let filteredFacilities = [];     // Facilities that match the current selection (category, power range)
+        let mapFacilities = [];          // Facilities that match the current selection (category, power range) and have GPS coordinates
+        let categories = [];             // All categories (solar, hydro, etc.)
+        let selectedCategories = [];     // Categories that are currently selected
+        let minPower = 0.1;              // Minimum power output (in kW)
+        let maxPower = 2000000;          // Maximum power output (in kW)
+
+        // Color palette for different categories
         const CATEGORY_COLORS = {
-            'Photovoltaic': [255, 193, 7],        // Amber/Yellow - solar
+            'Photovoltaic': [255, 193, 7],         // Amber/Yellow - solar
             'Hydroelectric power': [33, 150, 243], // Blue - water
             'Wind energy': [76, 175, 80],          // Green - wind
             'Biomass': [139, 69, 19],              // Brown - organic
@@ -487,9 +492,7 @@
             try {
                 const response = await fetch('ElectricityProductionPlant.json');
                 facilities = await response.json();
-                
-                // Create filtered array of facilities with coordinates once
-                facilitiesWithCoords = facilities.filter(f => f.lat && f.lon);
+                numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
                 
                 // Hide loading overlay
                 document.getElementById('loadingOverlay').style.display = 'none';
@@ -497,10 +500,11 @@
                 initializePowerSlider();
                 setupCategoryCheckboxes();
                 setupEventListeners();
-                updateFilteredFacilities();
+
+                updateCategoriesAndTotals();
                 updateMap();
                 
-                console.log(`Loaded ${facilities.length} facilities, ${facilitiesWithCoords.length} with coordinates`);
+                console.log(`Loaded ${facilities.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
             } catch (error) {
                 console.error('Error loading data:', error);
                 document.getElementById('loadingOverlay').innerHTML = `
@@ -526,7 +530,8 @@
         }
 
         function setupCategoryCheckboxes() {
-            const categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
+            categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
+            selectedCategories = [...categories]; // Initialize with all categories selected.
             const container = document.getElementById('categoryTableBody');
             
             categories.forEach(category => {
@@ -574,61 +579,13 @@
                 tr.appendChild(capacityCell);
                 container.appendChild(tr);
             });
-            
-            // Update initial statistics
-            updateCategoryStats();
-        }
-
-        function updateFilteredFacilities() {
-            const selectedCategories = getSelectedCategories();
-            const minPower = getCurrentMinPower();
-            const maxPower = getCurrentMaxPower();
-            
-            filteredFacilities = facilitiesWithCoords.filter(f => 
-                selectedCategories.includes(f.SubCategory) &&
-                f.TotalPower >= minPower &&
-                f.TotalPower <= maxPower
-            );
-        }
-
-        function updateCategoryStats() {
-            const minPower = getCurrentMinPower();
-            const maxPower = getCurrentMaxPower();
-            const categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
-            
-            categories.forEach(category => {
-                const filteredFacilities = facilitiesWithCoords.filter(f => 
-                    f.SubCategory === category && 
-                    f.TotalPower >= minPower &&
-                    f.TotalPower <= maxPower
-                );
-                
-                const count = filteredFacilities.length;
-                const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
-                
-                const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
-                const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
-                
-                if (countElement) countElement.textContent = count.toLocaleString();
-                if (capacityElement) capacityElement.textContent = totalCapacity.toFixed(1);
-            });
-            
-            updateTotals();
-        }
-
-        function updateTotals() {
-            updateFilteredFacilities();
-            const totalCount = filteredFacilities.length;
-            const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
-            
-            document.getElementById('totalCount').textContent = totalCount.toLocaleString();
-            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
         }
 
         function setupEventListeners() {
-            // Category checkboxes - use event delegation on the table
+            // Category checkboxes - use event delegation on the table.
             document.getElementById('categoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
+                    selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:checked')).map(cb => cb.value);
                     updateTotals();
                     updateMap();
                 }
@@ -637,8 +594,8 @@
             // Power range slider events
             const powerRangeSlider = document.getElementById('powerRangeSlider');
             powerRangeSlider.noUiSlider.on('update', function(values, handle) {
-                const minPower = Math.pow(10, values[0] - 1);
-                const maxPower = Math.pow(10, values[1] - 1);
+                minPower = Math.pow(10, values[0] - 1);
+                maxPower = Math.pow(10, values[1] - 1);
                 
                 function formatPower(power) {
                     if (power >= 1000000) {
@@ -654,32 +611,60 @@
                 const maxDisplay = formatPower(maxPower);
                 
                 document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
-                updateCategoryStats();
+                updateCategoriesAndTotals();
                 updateMap();
             });
         }
 
-        function getSelectedCategories() {
-            const checkboxes = document.querySelectorAll('#categoryTableBody input[type="checkbox"]:checked');
-            return Array.from(checkboxes).map(cb => cb.value);
+        function updateCategoriesAndTotals() {
+            let totalCapacity = 0;
+            let totalCount = 0;
+            filteredFacilities = []
+
+            categories.forEach(category => {
+                const categoryFilteredFacilities = facilities.filter(f =>
+                    f.SubCategory === category &&
+                    f.TotalPower >= minPower &&
+                    f.TotalPower <= maxPower
+                );
+
+                const count = categoryFilteredFacilities.length;
+                const capacity = categoryFilteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
+                const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
+                const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
+                if (countElement) countElement.textContent = count.toLocaleString();
+                if (capacityElement) capacityElement.textContent = capacity.toFixed(1);
+
+                // Add to totals.
+                if (selectedCategories.includes(category)) {
+                    filteredFacilities.push(...categoryFilteredFacilities);
+                    totalCapacity += capacity;
+                    totalCount += count;
+                }
+            });
+
+            document.getElementById('totalCount').textContent = totalCount.toLocaleString();
+            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
         }
 
-        function getCurrentMinPower() {
-            const slider = document.getElementById('powerRangeSlider');
-            const values = slider.noUiSlider.get();
-            return Math.pow(10, values[0] - 1); // -1 to start from 0.1 instead of 1
-        }
+        function updateTotals() {
+            filteredFacilities = facilities.filter(f => 
+                selectedCategories.includes(f.SubCategory) &&
+                f.TotalPower >= minPower &&
+                f.TotalPower <= maxPower
+            );
+            const totalCount = filteredFacilities.length;
+            const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
 
-        function getCurrentMaxPower() {
-            const slider = document.getElementById('powerRangeSlider');
-            const values = slider.noUiSlider.get();
-            return Math.pow(10, values[1] - 1); // -1 to start from 0.1 instead of 1
+            document.getElementById('totalCount').textContent = totalCount.toLocaleString();
+            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
         }
 
         function updateMap() {
+            mapFacilities = filteredFacilities.filter(f => f.lat && f.lon)
             const scatterplotLayer = new ScatterplotLayer({
                 id: 'facilities',
-                data: filteredFacilities,
+                data: mapFacilities,
                 getPosition: d => [d.lon, d.lat],
                 getFillColor: d => CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
                 getRadius: d => Math.max(50, Math.log(d.TotalPower + 1) * 30),
@@ -688,21 +673,17 @@
                 radiusMinPixels: 3,
                 radiusMaxPixels: 100,
                 updateTriggers: {
-                    getFillColor: getSelectedCategories(),
-                    getRadius: [getCurrentMinPower(), getCurrentMaxPower()]
+                    getFillColor: selectedCategories,
+                    getRadius: [minPower, maxPower]
                 }
             });
 
             deckgl.setProps({ layers: [scatterplotLayer] });
             
-            // Update facility count with explanation asterisk
-            const totalFacilities = facilities.length;
-            const filteredCount = filteredFacilities.length;
-            
             document.getElementById('facilityCount').innerHTML = 
-                `Showing ${filteredCount.toLocaleString()} of ${totalFacilities.toLocaleString()} facilities` +
+                `Displaying ${mapFacilities.length.toLocaleString()} facilities on map` +
                 `<span class="info-asterisk">*` +
-                `<span class="tooltip">${(totalFacilities - facilitiesWithCoords.length).toLocaleString()} facilities excluded due to missing GPS coordinates</span>` +
+                `<span class="tooltip">${(facilities.length - numFacilitiesWithCoords).toLocaleString()} facilities omitted from map due to missing GPS coordinates.</span>` +
                 `</span>`;
         }
 
