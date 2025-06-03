@@ -10,6 +10,7 @@
         html, body {margin: 0; height: 100%; overflow: hidden}
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .maplibregl-ctrl-group { display: none; }
         #controls {
             position: absolute;
             top: 10px;
@@ -32,31 +33,57 @@
             font-weight: 600;
             color: #333;
         }
-        .checkbox-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .checkbox-item input[type="checkbox"] {
-            margin: 0;
-        }
-        .checkbox-item label {
+        .category-table {
+            width: 100%;
+            border-collapse: collapse;
             font-size: 12px;
-            cursor: pointer;
+        }
+        .category-table th {
+            background: #f5f5f5;
+            padding: 8px 4px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+            font-size: 11px;
+        }
+        .category-table td {
+            padding: 6px 4px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+        .category-table tr:hover {
+            background: #f9f9f9;
+        }
+        .category-table .totals-row {
+            font-weight: 600;
+            background: #f0f0f0;
+            border-top: 2px solid #ccc;
+        }
+        .category-table .totals-row td {
+            border-bottom: none;
+        }
+        .category-checkbox {
+            margin: 0;
+            margin-right: 6px;
+        }
+        .category-label {
             display: flex;
             align-items: center;
-            gap: 6px;
+            cursor: pointer;
+            font-size: 11px;
         }
         .color-indicator {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             border: 1px solid #ccc;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+        .count-cell, .capacity-cell {
+            text-align: right;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 11px;
         }
         .power-control {
             display: flex;
@@ -88,9 +115,25 @@
     <div id="controls">
         <div class="control-section">
             <h3>Energy Categories</h3>
-            <div id="categoryCheckboxes" class="checkbox-group">
-                <!-- Checkboxes will be populated dynamically -->
-            </div>
+            <table id="categoryTable" class="category-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Count</th>
+                        <th>MW</th>
+                    </tr>
+                </thead>
+                <tbody id="categoryTableBody">
+                    <!-- Table rows will be populated dynamically -->
+                </tbody>
+                <tfoot>
+                    <tr class="totals-row">
+                        <td><strong>Selected Totals</strong></td>
+                        <td id="totalCount" class="count-cell"><strong>-</strong></td>
+                        <td id="totalCapacity" class="capacity-cell"><strong>-</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
         <div class="control-section">
             <h3>Minimum Power</h3>
@@ -181,21 +224,23 @@
 
         function setupCategoryCheckboxes() {
             const categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
-            const container = document.getElementById('categoryCheckboxes');
+            const container = document.getElementById('categoryTableBody');
             
             categories.forEach(category => {
-                const div = document.createElement('div');
-                div.className = 'checkbox-item';
+                const tr = document.createElement('tr');
                 
+                // Source column with checkbox and color indicator
+                const sourceCell = document.createElement('td');
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
+                checkbox.className = 'category-checkbox';
                 checkbox.id = `cat-${category.replace(/\s+/g, '-')}`;
                 checkbox.value = category;
                 checkbox.checked = true;
                 
                 const label = document.createElement('label');
+                label.className = 'category-label';
                 label.htmlFor = checkbox.id;
-                label.style.cursor = 'pointer';
                 
                 const colorIndicator = document.createElement('span');
                 colorIndicator.className = 'color-indicator';
@@ -207,15 +252,78 @@
                 
                 label.appendChild(colorIndicator);
                 label.appendChild(text);
-                div.appendChild(checkbox);
-                div.appendChild(label);
-                container.appendChild(div);
+                sourceCell.appendChild(checkbox);
+                sourceCell.appendChild(label);
+                
+                // Count column
+                const countCell = document.createElement('td');
+                countCell.className = 'count-cell';
+                countCell.id = `count-${category.replace(/\s+/g, '-')}`;
+                
+                // Capacity column (in MW)
+                const capacityCell = document.createElement('td');
+                capacityCell.className = 'capacity-cell';
+                capacityCell.id = `capacity-${category.replace(/\s+/g, '-')}`;
+                
+                tr.appendChild(sourceCell);
+                tr.appendChild(countCell);
+                tr.appendChild(capacityCell);
+                container.appendChild(tr);
             });
+            
+            // Update initial statistics
+            updateCategoryStats();
+        }
+
+        function updateCategoryStats() {
+            const minPower = getCurrentMinPower();
+            const categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
+            
+            categories.forEach(category => {
+                const filteredFacilities = facilities.filter(f => 
+                    f.SubCategory === category && 
+                    f.TotalPower >= minPower &&
+                    f.lat && f.lon
+                );
+                
+                const count = filteredFacilities.length;
+                const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
+                
+                const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
+                const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
+                
+                if (countElement) countElement.textContent = count.toLocaleString();
+                if (capacityElement) capacityElement.textContent = totalCapacity.toFixed(1);
+            });
+            
+            updateTotals();
+        }
+
+        function updateTotals() {
+            const selectedCategories = getSelectedCategories();
+            const minPower = getCurrentMinPower();
+            
+            const selectedFacilities = facilities.filter(f => 
+                selectedCategories.includes(f.SubCategory) &&
+                f.TotalPower >= minPower &&
+                f.lat && f.lon
+            );
+            
+            const totalCount = selectedFacilities.length;
+            const totalCapacity = selectedFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
+            
+            document.getElementById('totalCount').textContent = totalCount.toLocaleString();
+            document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
         }
 
         function setupEventListeners() {
-            // Category checkboxes
-            document.getElementById('categoryCheckboxes').addEventListener('change', updateMap);
+            // Category checkboxes - use event delegation on the table
+            document.getElementById('categoryTableBody').addEventListener('change', function(e) {
+                if (e.target.type === 'checkbox') {
+                    updateTotals();
+                    updateMap();
+                }
+            });
             
             // Power slider
             const powerSlider = document.getElementById('powerFilter');
@@ -225,6 +333,7 @@
                     ? `${logValue.toFixed(1)} kW`
                     : `${(logValue / 1000).toFixed(1)}M kW`;
                 document.getElementById('currentPower').textContent = displayValue;
+                updateCategoryStats(); // This will also call updateTotals() and updateMap()
                 updateMap();
             });
             
@@ -233,7 +342,7 @@
         }
 
         function getSelectedCategories() {
-            const checkboxes = document.querySelectorAll('#categoryCheckboxes input[type="checkbox"]:checked');
+            const checkboxes = document.querySelectorAll('#categoryTableBody input[type="checkbox"]:checked');
             return Array.from(checkboxes).map(cb => cb.value);
         }
 
