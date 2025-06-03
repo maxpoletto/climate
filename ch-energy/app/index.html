@@ -352,7 +352,7 @@
             top: 0;
             bottom: 0;
             left: 0;
-            right: 310px; /* Leave space for controls panel */
+            right: 320px; /* Leave space for controls panel */
             background: white;
             overflow: hidden;
         }
@@ -553,7 +553,7 @@
             <button id="viewToggle" class="view-toggle-btn">📊 Table View</button>
         </div>
         <div class="control-section">
-            <h3>Energy Facilities</h3>
+            <h3>Energy Sources</h3>
             <table id="categoryTable" class="category-table">
                 <thead>
                     <tr>
@@ -594,9 +594,10 @@
 
             <h4>Instructions</h4>
             <ul>
-                <li><strong>Energy facilities table:</strong> Check/uncheck energy sources to show/hide them on the map. View real-time facility counts and total capacity (MW) for each type.</li>
+                <li><strong>Energy sources panel:</strong> Check/uncheck energy sources to show/hide them on the map. View real-time facility counts and total capacity (MW) for each type.</li>
                 <li><strong>Power range slider:</strong> Drag the handles to filter facilities by their power output.</li>
-                <li><strong>Map:</strong> Mouse wheel / pinch to zoom, click+drag / tap+drag to pan, Shift+drag to change rotation and tilt. Hover over any facility for details.</li>
+                <li><strong>Map view:</strong> Mouse wheel / pinch to zoom, click+drag / tap+drag to pan, Shift+drag to change rotation and tilt. Hover over any facility for details. The dataset does not contain GPS coordinates for all facilities, so not all facilities are displayed on the map.</li>
+                <li><strong>Table view:</strong> View all facilities, including ones without GPS coordinates. Use the pagination controls to navigate. Columns headers allow sorting.</li>
             </ul>
 
             <h4>About the data</h4>
