@@ -1065,7 +1065,7 @@
 
                 // Add to totals.
                 if (selectedCategories.includes(category)) {
-                    filteredFacilities.push(...categoryFilteredFacilities);
+                    filteredFacilities = filteredFacilities.concat(categoryFilteredFacilities);
                     totalCapacity += capacity;
                     totalCount += count;
                 }
