@@ -409,7 +409,14 @@
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            table-layout: fixed;
         }
+        #facilitiesTable th:nth-child(1) { width: 25%; } /* Energy Source */
+        #facilitiesTable th:nth-child(2) { width: 15%; } /* Power (kW) */
+        #facilitiesTable th:nth-child(3) { width: 25%; } /* Municipality */
+        #facilitiesTable th:nth-child(4) { width: 12%; } /* Canton */
+        #facilitiesTable th:nth-child(5) { width: 15%; } /* Started */
+        #facilitiesTable th:nth-child(6) { width: 8%; }  /* GPS */
         #facilitiesTable th {
             background: #f5f5f5;
             padding: 12px 8px;
@@ -434,6 +441,9 @@
             padding: 8px;
             border-bottom: 1px solid #eee;
             vertical-align: middle;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         #facilitiesTable td.numeric {
             text-align: right;
@@ -510,9 +520,11 @@
                 <div id="tableControls">
                     <span id="tableCount">Showing 0 facilities</span>
                     <div id="paginationControls" style="margin-top: 8px;">
-                        <button id="prevPage" disabled>← Previous</button>
+                        <button id="firstPage" disabled>&lt;&lt;</button>
+                        <button id="prevPage" disabled>&lt;</button>
                         <span id="pageInfo">Page 1 of 1</span>
-                        <button id="nextPage" disabled>Next →</button>
+                        <button id="nextPage" disabled>&gt;</button>
+                        <button id="lastPage" disabled>&gt;&gt;</button>
                     </div>
                 </div>
             </div>
@@ -855,6 +867,14 @@
         }
 
         function setupPagination() {
+            document.getElementById('firstPage').addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage = 1;
+                    renderTable();
+                    updatePaginationControls();
+                }
+            });
+
             document.getElementById('prevPage').addEventListener('click', () => {
                 if (currentPage > 1) {
                     currentPage--;
@@ -867,6 +887,15 @@
                 const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
                 if (currentPage < totalPages) {
                     currentPage++;
+                    renderTable();
+                    updatePaginationControls();
+                }
+            });
+
+            document.getElementById('lastPage').addEventListener('click', () => {
+                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+                if (currentPage < totalPages) {
+                    currentPage = totalPages;
                     renderTable();
                     updatePaginationControls();
                 }
@@ -1009,8 +1038,10 @@
                 `Page ${currentPage} of ${totalPages} (${startIndex}-${endIndex} of ${displayedFacilities.length.toLocaleString()})`;
             
             // Update button states
+            document.getElementById('firstPage').disabled = currentPage <= 1;
             document.getElementById('prevPage').disabled = currentPage <= 1;
             document.getElementById('nextPage').disabled = currentPage >= totalPages;
+            document.getElementById('lastPage').disabled = currentPage >= totalPages;
         }
 
         function updateCategoriesAndTotals() {
