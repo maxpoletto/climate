@@ -25,6 +25,7 @@
             width: 280px;
             max-height: 80vh;
             overflow-y: auto;
+            overflow-x: hidden;
         }
         .control-section {
             margin-bottom: 20px;
@@ -140,18 +141,18 @@
         .tooltip {
             position: absolute;
             bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
+            right: 0;
             background: #333;
             color: white;
-            padding: 8px 12px;
+            padding: 6px 8px;
             border-radius: 4px;
-            font-size: 11px;
-            white-space: nowrap;
+            font-size: 10px;
+            width: 200px;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s;
             z-index: 1000;
+            box-sizing: border-box;
         }
         .info-asterisk:hover .tooltip {
             opacity: 1;
@@ -160,9 +161,8 @@
             content: '';
             position: absolute;
             top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 5px solid transparent;
+            right: 15px;
+            border: 4px solid transparent;
             border-top-color: #333;
         }
         
@@ -233,21 +233,20 @@
             background: #e0e0e0;
             border-radius: 8px;
             border: none;
-            box-shadow: none;
             height: 8px;
         }
         .noUi-connect {
             background: #2196F3;
         }
         .noUi-handle {
-            width: 16px;
-            height: 16px;
+            width: 24px !important;
+            height: 24px !important;
             border-radius: 50%;
             background: #fff;
             border: 2px solid #2196F3;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
             cursor: grab;
-            top: -6px;
+            outline: none;
+            top: -8px !important;
         }
         .noUi-handle:active {
             cursor: grabbing;
