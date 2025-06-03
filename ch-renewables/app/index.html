@@ -7,42 +7,125 @@
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
     <style>
-        body { margin: 0; padding: 0; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
         #map { position: absolute; top: 0; bottom: 0; width: 100%; }
         #controls {
             position: absolute;
             top: 10px;
             right: 10px;
             background: white;
-            padding: 10px;
-            border-radius: 4px;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             z-index: 1;
+            max-width: 280px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .control-section {
+            margin-bottom: 20px;
+        }
+        .control-section h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-item input[type="checkbox"] {
+            margin: 0;
+        }
+        .checkbox-item label {
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .color-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid #ccc;
+        }
+        .power-control {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .power-values {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #666;
+        }
+        #powerFilter {
+            width: 100%;
+        }
+        .facility-count {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
     <div id="controls">
-        <div>
-            <label>Category:</label>
-            <select id="categoryFilter">
-                <option value="all">All</option>
-            </select>
+        <div class="control-section">
+            <h3>Energy Categories</h3>
+            <div id="categoryCheckboxes" class="checkbox-group">
+                <!-- Checkboxes will be populated dynamically -->
+            </div>
         </div>
-        <div>
-            <label>Min Power (kW):</label>
-            <input type="range" id="powerFilter" min="0" max="6" step="0.1" value="0" 
-               oninput="this.nextElementSibling.value = Math.pow(10, this.value).toFixed()">
-            <output id="powerThresh" style="font-family: monospace; text-align: right; min-width: 5em; display: inline-block;">1</output>
+        <div class="control-section">
+            <h3>Minimum Power</h3>
+            <div class="power-control">
+                <input type="range" id="powerFilter" min="0" max="7" step="0.1" value="0">
+                <div class="power-values">
+                    <span>0.1 kW</span>
+                    <span id="currentPower">0.1 kW</span>
+                    <span>10M kW</span>
+                </div>
+            </div>
         </div>
+        <div class="facility-count" id="facilityCount">Loading...</div>
     </div>
 
     <script>
-        const {Deck, ScatterplotLayer, BitmapLayer, TileLayer} = deck;  // Destructure what we need
+        const {Deck, ScatterplotLayer} = deck;
 
         const MAPTILER_KEY = 'HtGwidy8WklIVYnFKMJk';
         let facilities = [];
         let deckgl;
+
+        // Color palette for different subcategories
+        const CATEGORY_COLORS = {
+            'Photovoltaic': [255, 193, 7],        // Amber/Yellow - solar
+            'Hydroelectric power': [33, 150, 243], // Blue - water
+            'Wind energy': [76, 175, 80],          // Green - wind
+            'Biomass': [139, 69, 19],              // Brown - organic
+            'Natural gas': [255, 87, 34],          // Orange-red - gas
+            'Waste': [158, 158, 158],              // Gray - waste
+            'Nuclear energy': [156, 39, 176],      // Purple - nuclear
+            'Crude oil': [96, 125, 139]            // Blue-gray - oil
+        };
 
         function initialize() {
             maptilersdk.config.apiKey = MAPTILER_KEY;
@@ -58,60 +141,144 @@
                     bearing: 0
                 },
                 controller: true,
-                layers: []
+                layers: [],
+                getTooltip: ({object}) => {
+                    if (!object) return null;
+                    return {
+                        html: `
+                            <strong>${object.SubCategory}</strong><br/>
+                            Power: ${object.TotalPower.toLocaleString()} kW<br/>
+                            Location: ${object.Municipality}, ${object.Canton}<br/>
+                            Started: ${object.BeginningOfOperation}
+                        `,
+                        style: {
+                            backgroundColor: 'white',
+                            fontSize: '12px',
+                            padding: '8px',
+                            borderRadius: '4px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                        }
+                    };
+                }
             });
             
             loadData();
         }
-        async function loadData() {
-            const response = await fetch('ElectricityProductionPlant.json');
-            facilities = await response.json();
-            
-            // Populate category filter
-            const categories = [...new Set(facilities.map(f => f.SubCategory))];
-            const select = document.getElementById('categoryFilter');
-            categories.sort().forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat;
-                option.text = cat;
-                select.appendChild(option);
-            });
 
-            updateMap();
+        async function loadData() {
+            try {
+                const response = await fetch('ElectricityProductionPlant.json');
+                facilities = await response.json();
+                
+                setupCategoryCheckboxes();
+                setupEventListeners();
+                updateMap();
+                
+                console.log(`Loaded ${facilities.length} facilities`);
+            } catch (error) {
+                console.error('Error loading data:', error);
+                document.getElementById('facilityCount').textContent = 'Error loading data';
+            }
         }
+
+        function setupCategoryCheckboxes() {
+            const categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
+            const container = document.getElementById('categoryCheckboxes');
+            
+            categories.forEach(category => {
+                const div = document.createElement('div');
+                div.className = 'checkbox-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `cat-${category.replace(/\s+/g, '-')}`;
+                checkbox.value = category;
+                checkbox.checked = true;
+                
+                const label = document.createElement('label');
+                label.htmlFor = checkbox.id;
+                label.style.cursor = 'pointer';
+                
+                const colorIndicator = document.createElement('span');
+                colorIndicator.className = 'color-indicator';
+                const color = CATEGORY_COLORS[category] || [128, 128, 128];
+                colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
+                
+                const text = document.createElement('span');
+                text.textContent = category;
+                
+                label.appendChild(colorIndicator);
+                label.appendChild(text);
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                container.appendChild(div);
+            });
+        }
+
+        function setupEventListeners() {
+            // Category checkboxes
+            document.getElementById('categoryCheckboxes').addEventListener('change', updateMap);
+            
+            // Power slider
+            const powerSlider = document.getElementById('powerFilter');
+            powerSlider.addEventListener('input', function() {
+                const logValue = Math.pow(10, parseFloat(this.value) - 1);
+                const displayValue = logValue < 1000 
+                    ? `${logValue.toFixed(1)} kW`
+                    : `${(logValue / 1000).toFixed(1)}M kW`;
+                document.getElementById('currentPower').textContent = displayValue;
+                updateMap();
+            });
+            
+            // Initial power display
+            powerSlider.dispatchEvent(new Event('input'));
+        }
+
+        function getSelectedCategories() {
+            const checkboxes = document.querySelectorAll('#categoryCheckboxes input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        function getCurrentMinPower() {
+            const sliderValue = parseFloat(document.getElementById('powerFilter').value);
+            return Math.pow(10, sliderValue - 1); // -1 to start from 0.1 instead of 1
+        }
+
         function updateMap() {
-            const category = document.getElementById('categoryFilter').value;
-            const minPower = parseFloat(document.getElementById('powerThresh').value) || 0;
+            const selectedCategories = getSelectedCategories();
+            const minPower = getCurrentMinPower();
 
             const filtered = facilities.filter(f => 
-                (category === 'all' || f.SubCategory === category) &&
-                (f.TotalPower >= minPower)
+                selectedCategories.includes(f.SubCategory) &&
+                f.TotalPower >= minPower &&
+                f.lat && f.lon // Ensure coordinates exist
             );
 
-            deckgl.setProps(
-                {layers: [
-                    new ScatterplotLayer({
-                        id: 'facilities',
-                        data: filtered,
-                        getPosition: d => [d.lon, d.lat],
-                        getFillColor: [254, 235, 200],
-                        getRadius: 10, //d => Math.log(d.TotalPower + 1) * 20,
-                        opacity: 0.6,
-                        pickable: true,
-                        onClick: info => {
-                            if (info.object) {
-                                console.log(info.object);
-                            }
-                        }
-                    })
-                ]}
-                )
-        }            
-        // Initialize
-        initialize();
-        //document.getElementById('categoryFilter').onchange = updateMap;
-        //document.getElementById('powerFilter').onchange = updateMap;
-    </script>
+            const scatterplotLayer = new ScatterplotLayer({
+                id: 'facilities',
+                data: filtered,
+                getPosition: d => [d.lon, d.lat],
+                getFillColor: d => CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
+                getRadius: d => Math.max(50, Math.log(d.TotalPower + 1) * 30),
+                opacity: 0.7,
+                pickable: true,
+                radiusMinPixels: 3,
+                radiusMaxPixels: 100,
+                updateTriggers: {
+                    getFillColor: selectedCategories,
+                    getRadius: minPower
+                }
+            });
 
+            deckgl.setProps({ layers: [scatterplotLayer] });
+            
+            // Update facility count
+            document.getElementById('facilityCount').textContent = 
+                `Showing ${filtered.length.toLocaleString()} of ${facilities.length.toLocaleString()} facilities`;
+        }
+
+        // Initialize the application
+        initialize();
+    </script>
 </body>
 </html>
