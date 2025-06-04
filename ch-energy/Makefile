@@ -14,6 +14,10 @@ serve: app/ElectricityProductionPlant.json
 	@echo "Starting development server..."
 	cd app && python3 -m http.server 8000
 
+# Install Python dependencies
+deps:
+	pip3.12 install -r requirements.txt
+
 # Clean up generated files
 clean:
 	@echo "Cleaning up..."
