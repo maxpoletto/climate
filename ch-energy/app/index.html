@@ -904,6 +904,10 @@
 
         function sortTable(column) {
             const direction = (currentSort.column === column && currentSort.direction === 'asc') ? 'desc' : 'asc';
+            applySortToTable(column, direction);
+        }
+
+        function applySortToTable(column, direction) {
             currentSort = { column, direction };
 
             // Clear all sort indicators
@@ -957,9 +961,9 @@
             // Reset to first page when data changes
             currentPage = 1;
 
-            // Apply current sort if any
+            // Apply current sort if any (maintain current direction)
             if (currentSort.column) {
-                sortTable(currentSort.column);
+                applySortToTable(currentSort.column, currentSort.direction);
             } else {
                 renderTable();
                 updatePaginationControls();
