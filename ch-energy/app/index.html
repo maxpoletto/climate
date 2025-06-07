@@ -904,10 +904,6 @@
 
         function sortTable(column) {
             const direction = (currentSort.column === column && currentSort.direction === 'asc') ? 'desc' : 'asc';
-            applySortToTable(column, direction);
-        }
-
-        function applySortToTable(column, direction) {
             currentSort = { column, direction };
 
             // Clear all sort indicators
@@ -919,8 +915,8 @@
             const currentHeader = document.querySelector(`th[data-sort="${column}"] .sort-indicator`);
             currentHeader.className = `sort-indicator ${direction}`;
 
-            // Sort the displayed facilities
-            displayedFacilities.sort((a, b) => {
+            // Sort the underlying facilities array - this preserves multi-column sorts
+            facilities.sort((a, b) => {
                 let aVal, bVal;
 
                 switch (column) {
@@ -946,28 +942,27 @@
                 }
             });
 
+            // Re-filter and update display with the newly sorted data
+            updateCategoriesAndTotals();
+            updateMap();
+
             // Reset to first page after sorting
             currentPage = 1;
-            renderTable();
-            updatePaginationControls();
+            if (isTableView) {
+                updateTable();
+            }
         }
 
         function updateTable() {
             if (!isTableView) return;
 
-            // Use the same filtered facilities as the map
+            // Use the same filtered facilities as the map (already sorted by underlying array)
             displayedFacilities = [...filteredFacilities];
 
             // Reset to first page when data changes
             currentPage = 1;
-
-            // Apply current sort if any (maintain current direction)
-            if (currentSort.column) {
-                applySortToTable(currentSort.column, currentSort.direction);
-            } else {
-                renderTable();
-                updatePaginationControls();
-            }
+            renderTable();
+            updatePaginationControls();
 
             // Update count
             document.getElementById('tableCount').textContent =
@@ -1049,32 +1044,46 @@
         }
 
         function updateCategoriesAndTotals() {
-            let totalCapacity = 0;
-            let totalCount = 0;
-            filteredFacilities = []
-
+            // Initialize category stats
+            const categoryStats = {};
             categories.forEach(category => {
-                const categoryFilteredFacilities = facilities.filter(f =>
-                    f.SubCategory === category &&
-                    f.TotalPower >= minPower &&
-                    f.TotalPower <= maxPower
-                );
-
-                const count = categoryFilteredFacilities.length;
-                const capacity = categoryFilteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
-                const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
-                const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
-                if (countElement) countElement.textContent = count.toLocaleString();
-                if (capacityElement) capacityElement.textContent = capacity.toFixed(1);
-
-                // Add to totals.
-                if (selectedCategories.includes(category)) {
-                    filteredFacilities = filteredFacilities.concat(categoryFilteredFacilities);
-                    totalCapacity += capacity;
-                    totalCount += count;
-                }
+                categoryStats[category] = { count: 0, capacity: 0 };
             });
 
+            let totalCapacity = 0;
+            let totalCount = 0;
+            filteredFacilities = [];
+
+            // Single pass through sorted facilities to collect stats and build filtered list
+            facilities
+                .filter(f => f.TotalPower >= minPower && f.TotalPower <= maxPower)
+                .forEach(f => {
+                    const category = f.SubCategory;
+
+                    // Update category stats
+                    if (categoryStats[category]) {
+                        categoryStats[category].count++;
+                        categoryStats[category].capacity += f.TotalPower / 1000; // Convert to MW
+                    }
+
+                    // Add to filtered facilities if category is selected
+                    if (selectedCategories.includes(category)) {
+                        filteredFacilities.push(f);
+                        totalCapacity += f.TotalPower / 1000; // Convert to MW
+                        totalCount++;
+                    }
+                });
+
+            // Update category display elements
+            categories.forEach(category => {
+                const stats = categoryStats[category];
+                const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
+                const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
+                if (countElement) countElement.textContent = stats.count.toLocaleString();
+                if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
+            });
+
+            // Update totals
             document.getElementById('totalCount').textContent = totalCount.toLocaleString();
             document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
         }
