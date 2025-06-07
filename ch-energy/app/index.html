@@ -647,7 +647,7 @@
 
         // Table view state
         let isTableView = false;
-        let currentSort = { column: null, direction: 'asc' };
+        let currentSort = { column: 'TotalPower', direction: 'desc' };
         let displayedFacilities = [];    // Currently displayed facilities in table
         let currentPage = 1;
         let facilitiesPerPage = 50;      // Show 50 facilities per page
@@ -713,6 +713,8 @@
 
                 initializePowerSlider();
                 setupCategoryCheckboxes();
+                setDefaultSort();
+
                 updateCategoriesAndTotals();
                 setupEventListeners();
                 updateMap();
@@ -740,6 +742,43 @@
                 },
                 step: 0.1
             });
+        }
+
+        function sortFacilities(column, direction) {
+            facilities.sort((a, b) => {
+                let aVal, bVal;
+
+                switch (column) {
+                    case 'TotalPower':
+                        aVal = a.TotalPower || 0;
+                        bVal = b.TotalPower || 0;
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+
+                    case 'BeginningOfOperation':
+                        aVal = new Date(a.BeginningOfOperation || '1900-01-01');
+                        bVal = new Date(b.BeginningOfOperation || '1900-01-01');
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+
+                    case 'gps':
+                        aVal = (a.lat && a.lon) ? 1 : 0;
+                        bVal = (b.lat && b.lon) ? 1 : 0;
+                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
+
+                    default: // String columns
+                        aVal = (a[column] || '').toString().toLowerCase();
+                        bVal = (b[column] || '').toString().toLowerCase();
+                        return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+            });
+        }
+
+        function setDefaultSort() {
+            sortFacilities('Municipality', 'asc');
+            sortFacilities('TotalPower', 'desc');
+            const powerHeader = document.querySelector('th[data-sort="TotalPower"] .sort-indicator');
+            if (powerHeader) {
+                powerHeader.className = 'sort-indicator desc';
+            }
         }
 
         function setupCategoryCheckboxes() {
@@ -906,41 +945,15 @@
             const direction = (currentSort.column === column && currentSort.direction === 'asc') ? 'desc' : 'asc';
             currentSort = { column, direction };
 
-            // Clear all sort indicators
+            // Clear all sort indicators and set the new one
             document.querySelectorAll('.sort-indicator').forEach(indicator => {
                 indicator.className = 'sort-indicator';
             });
-
-            // Set current sort indicator
             const currentHeader = document.querySelector(`th[data-sort="${column}"] .sort-indicator`);
             currentHeader.className = `sort-indicator ${direction}`;
 
-            // Sort the underlying facilities array - this preserves multi-column sorts
-            facilities.sort((a, b) => {
-                let aVal, bVal;
-
-                switch (column) {
-                    case 'TotalPower':
-                        aVal = a.TotalPower || 0;
-                        bVal = b.TotalPower || 0;
-                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-                    case 'BeginningOfOperation':
-                        aVal = new Date(a.BeginningOfOperation || '1900-01-01');
-                        bVal = new Date(b.BeginningOfOperation || '1900-01-01');
-                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-                    case 'gps':
-                        aVal = (a.lat && a.lon) ? 1 : 0;
-                        bVal = (b.lat && b.lon) ? 1 : 0;
-                        return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-                    default: // String columns
-                        aVal = (a[column] || '').toString().toLowerCase();
-                        bVal = (b[column] || '').toString().toLowerCase();
-                        return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-                }
-            });
+            // Sort the underlying facilities array
+            sortFacilities(column, direction);
 
             // Re-filter and update display with the newly sorted data
             updateCategoriesAndTotals();
@@ -954,8 +967,6 @@
         }
 
         function updateTable() {
-            if (!isTableView) return;
-
             // Use the same filtered facilities as the map (already sorted by underlying array)
             displayedFacilities = [...filteredFacilities];
 
@@ -994,7 +1005,10 @@
                 // Power
                 const powerCell = document.createElement('td');
                 powerCell.className = 'numeric';
-                powerCell.textContent = (facility.TotalPower || 0).toLocaleString();
+                powerCell.textContent = (facility.TotalPower || 0).toLocaleString(undefined, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1
+                });
 
                 // Municipality
                 const municipalityCell = document.createElement('td');
@@ -1128,7 +1142,9 @@
                 `</span>`;
 
             // Update table if in table view
-            updateTable();
+            if (isTableView) {
+                updateTable();
+            }
         }
 
         // Info modal functionality
