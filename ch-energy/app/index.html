@@ -717,7 +717,7 @@
 
                 updateCategoriesAndTotals();
                 setupEventListeners();
-                updateMap();
+                updateTableOrMap();
 
                 console.log(`Loaded ${facilities.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
             } catch (error) {
@@ -833,13 +833,20 @@
             });
         }
 
+        function updateTableOrMap() {
+            if (isTableView) {
+                updateTable();
+            } else {
+                updateMap();
+            }
+        }
         function setupEventListeners() {
             // Category checkboxes - use event delegation on the table.
             document.getElementById('categoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
                     selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:checked')).map(cb => cb.value);
                     updateTotals();
-                    updateMap();
+                    updateTableOrMap();
                 }
             });
 
@@ -864,7 +871,7 @@
 
                 document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
                 updateCategoriesAndTotals();
-                updateMap();
+                updateTableOrMap();
             });
 
             setupViewToggle();
@@ -957,16 +964,18 @@
 
             // Re-filter and update display with the newly sorted data
             updateCategoriesAndTotals();
-            updateMap();
+            updateTableOrMap();
 
             // Reset to first page after sorting
             currentPage = 1;
-            if (isTableView) {
-                updateTable();
-            }
+            updateTableOrMap();
         }
 
         function updateTable() {
+            // assert tableview
+            if (!isTableView) {
+                throw new Error('updateTable called in map view');
+            }
             // Use the same filtered facilities as the map (already sorted by underlying array)
             displayedFacilities = [...filteredFacilities];
 
@@ -1116,6 +1125,9 @@
         }
 
         function updateMap() {
+            if (isTableView) {
+                throw new Error('updateMap called in table view');
+            }
             mapFacilities = filteredFacilities.filter(f => f.lat && f.lon)
             const scatterplotLayer = new ScatterplotLayer({
                 id: 'facilities',
@@ -1140,11 +1152,6 @@
                 `<span class="info-asterisk">*` +
                 `<span class="tooltip">${(facilities.length - numFacilitiesWithCoords).toLocaleString()} facilities omitted from map due to missing GPS coordinates.</span>` +
                 `</span>`;
-
-            // Update table if in table view
-            if (isTableView) {
-                updateTable();
-            }
         }
 
         // Info modal functionality
