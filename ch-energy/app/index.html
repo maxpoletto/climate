@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-    <title>Swiss Energy Facilities Map</title>
+    <title>Swiss Energy Facilities</title>
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
@@ -257,22 +257,24 @@
             display: none;
         }
         .info-button {
-            position: absolute;
-            top: 5px;
-            left: 5px;
-            width: 20px;
-            height: 20px;
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             background: #2196F3;
             color: white;
             border: none;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 18px;
             font-weight: bold;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: background-color 0.3s;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
         .info-button:hover {
             background: #1976D2;
@@ -366,12 +368,8 @@
             border-bottom: 1px solid #ddd;
             background: #f9f9f9;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
-        }
-        #tableHeader h3 {
-            margin: 0;
-            color: #333;
         }
         #tableControls {
             font-size: 14px;
@@ -512,11 +510,11 @@
         </div>
     </div>
 
+    <button class="info-button" id="infoButton">?</button>
     <div id="map"></div>
     <div id="tableView" style="display: none;">
         <div id="tableContainer">
             <div id="tableHeader">
-                <h3>Energy Facilities Table</h3>
                 <div id="tableControls">
                     <span id="tableCount">Showing 0 facilities</span>
                     <div id="paginationControls" style="margin-top: 8px;">
@@ -560,7 +558,6 @@
         </div>
     </div>
     <div id="controls">
-        <button class="info-button" id="infoButton">i</button>
         <div class="control-section">
             <button id="viewToggle" class="view-toggle-btn">📊 Table View</button>
         </div>
@@ -1068,7 +1065,6 @@
         }
 
         function updateCategoriesAndTotals() {
-            // Initialize category stats
             const categoryStats = {};
             categories.forEach(category => {
                 categoryStats[category] = { count: 0, capacity: 0 };
@@ -1078,7 +1074,6 @@
             let totalCount = 0;
             filteredFacilities = [];
 
-            // Single pass through sorted facilities to collect stats and build filtered list
             facilities
                 .filter(f => f.TotalPower >= minPower && f.TotalPower <= maxPower)
                 .forEach(f => {
