@@ -398,6 +398,8 @@
         #pageInfo {
             font-size: 12px;
             color: #666;
+            min-width: 180px;
+            text-align: center;
         }
         #tableWrapper {
             flex: 1;
@@ -516,11 +518,10 @@
         <div id="tableContainer">
             <div id="tableHeader">
                 <div id="tableControls">
-                    <span id="tableCount">Showing 0 facilities</span>
-                    <div id="paginationControls" style="margin-top: 8px;">
+                    <div id="paginationControls">
                         <button id="firstPage" disabled>&lt;&lt;</button>
                         <button id="prevPage" disabled>&lt;</button>
-                        <span id="pageInfo">Page 1 of 1</span>
+                        <span id="pageInfo">Page <span id="currentPageNumber" style="cursor: pointer; text-decoration: underline; color: #2196F3;">1</span> of <span id="totalPages">1</span></span>
                         <button id="nextPage" disabled>&gt;</button>
                         <button id="lastPage" disabled>&gt;&gt;</button>
                     </div>
@@ -915,7 +916,6 @@
                 if (currentPage > 1) {
                     currentPage = 1;
                     renderTable();
-                    updatePaginationControls();
                 }
             });
 
@@ -923,7 +923,6 @@
                 if (currentPage > 1) {
                     currentPage--;
                     renderTable();
-                    updatePaginationControls();
                 }
             });
 
@@ -932,7 +931,6 @@
                 if (currentPage < totalPages) {
                     currentPage++;
                     renderTable();
-                    updatePaginationControls();
                 }
             });
 
@@ -941,9 +939,11 @@
                 if (currentPage < totalPages) {
                     currentPage = totalPages;
                     renderTable();
-                    updatePaginationControls();
                 }
             });
+
+            // Page number click => inline input
+            document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
         }
 
         function sortTable(column) {
@@ -970,7 +970,6 @@
         }
 
         function updateTable() {
-            // assert tableview
             if (!isTableView) {
                 throw new Error('updateTable called in map view');
             }
@@ -980,11 +979,6 @@
             // Reset to first page when data changes
             currentPage = 1;
             renderTable();
-            updatePaginationControls();
-
-            // Update count
-            document.getElementById('tableCount').textContent =
-                `Showing ${displayedFacilities.length.toLocaleString()} facilities`;
         }
 
         function renderTable() {
@@ -1046,16 +1040,77 @@
                 row.appendChild(gpsCell);
                 tbody.appendChild(row);
             });
+            updatePaginationControls();
+        }
+
+        function createPageNumberSpan() {
+            const span = document.createElement('span');
+            span.id = 'currentPageNumber';
+            span.style.cursor = 'pointer';
+            span.style.textDecoration = 'underline';
+            span.style.color = '#2196F3';
+            span.textContent = currentPage.toString();
+            span.addEventListener('click', handlePageNumberClick);
+            return span;
+        }
+
+        function createPageNumberInput() {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '1';
+            input.max = totalPages.toString();
+            input.value = currentPage.toString();
+            input.style.width = '50px';
+            input.style.textAlign = 'center';
+            input.style.border = '1px solid #2196F3';
+            input.style.borderRadius = '3px';
+            input.style.padding = '2px';
+            input.style.fontSize = '12px';
+            return input;
+        }
+
+        function handlePageNumberClick(e) {
+            const span = e.target;
+            const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+
+            // Replace span with input
+            const input = createPageNumberInput();
+            span.parentNode.replaceChild(input, span);
+            input.focus();
+            input.select();
+
+            // Handle input completion
+            const finishEdit = () => {
+                const pageNumber = parseInt(input.value);
+                if (pageNumber >= 1 && pageNumber <= totalPages) {
+                    currentPage = pageNumber;
+                }
+                // Restore span with current page number
+                const newSpan = createPageNumberSpan();
+                input.parentNode.replaceChild(newSpan, input);
+                if (pageNumber >= 1 && pageNumber <= totalPages) {
+                    renderTable();
+                }
+            };
+
+            input.addEventListener('blur', finishEdit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    input.blur();
+                } else if (e.key === 'Escape') {
+                    // Cancel edit - restore span without changing page
+                    const newSpan = createPageNumberSpan();
+                    input.parentNode.replaceChild(newSpan, input);
+                }
+            });
         }
 
         function updatePaginationControls() {
             const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
-            const startIndex = (currentPage - 1) * facilitiesPerPage + 1;
-            const endIndex = Math.min(currentPage * facilitiesPerPage, displayedFacilities.length);
 
             // Update page info
-            document.getElementById('pageInfo').textContent =
-                `Page ${currentPage} of ${totalPages} (${startIndex}-${endIndex} of ${displayedFacilities.length.toLocaleString()})`;
+            document.getElementById('currentPageNumber').textContent = currentPage;
+            document.getElementById('totalPages').textContent = totalPages;
 
             // Update button states
             document.getElementById('firstPage').disabled = currentPage <= 1;
@@ -1144,9 +1199,9 @@
             deckgl.setProps({ layers: [scatterplotLayer] });
 
             document.getElementById('facilityCount').innerHTML =
-                `Displaying ${mapFacilities.length.toLocaleString()} facilities on map` +
+                `${filteredFacilities.length.toLocaleString()} facilities match filters.<br/>Map shows ${mapFacilities.length.toLocaleString()} facilities.` +
                 `<span class="info-asterisk">*` +
-                `<span class="tooltip">${(facilities.length - numFacilitiesWithCoords).toLocaleString()} facilities omitted from map due to missing GPS coordinates.</span>` +
+                `<span class="tooltip">${(filteredFacilities.length - mapFacilities.length).toLocaleString()} facilities lack GPS coordinates in source data.</span>` +
                 `</span>`;
         }
 
