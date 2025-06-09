@@ -609,7 +609,7 @@
         </div>
         <div class="control-section">
             <h3>Search</h3>
-            <input type="text" id="searchInput" placeholder="(e.g., 'vs hydro', '2024 basel', 'biomass', ...)" />
+            <input type="text" id="searchInput" placeholder="(e.g., 'canton:vs', 'year:2021', 'zürich', ...)" />
         </div>
         <div class="facility-count" id="facilityCount">Loading...</div>
     </div>
@@ -678,6 +678,7 @@
         let minPower = 0.1;              // Minimum power output (in kW)
         let maxPower = 2000000;          // Maximum power output (in kW)
         let searchTokens = [];           // Current search tokens
+        let searchTimeout = null;        // Debounce timeout for search
 
         // Table view state
         let isTableView = false;
@@ -939,9 +940,16 @@
             const searchInput = document.getElementById('searchInput');
             searchInput.addEventListener('input', (e) => {
                 const searchText = e.target.value;
-                searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
-                updateCategoriesAndTotals();
-                updateTableOrMap();
+
+                // Use a timeout to debounce search (reduce expensive filter computations).
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+                searchTimeout = setTimeout(() => {
+                    searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+                    updateCategoriesAndTotals();
+                    updateTableOrMap();
+                }, 300); // 300ms delay
             });
         }
 
