@@ -621,10 +621,26 @@
 
             <h4>Instructions</h4>
             <ul>
-                <li><strong>Energy sources panel:</strong> Check/uncheck energy sources to show/hide them on the map. View real-time facility counts and total capacity (MW) for each type.</li>
-                <li><strong>Power range slider:</strong> Drag the handles to filter facilities by their power output.</li>
-                <li><strong>Map view:</strong> Mouse wheel / pinch to zoom, click+drag / tap+drag to pan, Shift+drag to change rotation and tilt. Hover over any facility for details. The dataset does not contain GPS coordinates for all facilities, so not all facilities are displayed on the map.</li>
-                <li><strong>Table view:</strong> View all facilities, including ones without GPS coordinates. Use the pagination controls to navigate. Columns headers allow sorting.</li>
+                <li><strong>Energy sources panel</strong>
+                    <p>Controls what facilities are displayed in map and table view.</p>
+                    <ul>
+                        <li>Check/uncheck energy source types (biomass, hydro, etc.).</li>
+                        <li>Drag the handles of the power range slider to filter facilities by their power output.</li>
+                        <li>Type in the search input to filter facilities by name, municipality, canton, or energy source. Supports case-insensitive free-form substring match, e.g., 'vs hydro 2021',
+                            and also the keywords 'canton' (e.g., 'canton:be'),'city' (e.g., 'city:zürich'), and 'year' (e.g., 'year:202' matches any facility started in the 2020s).
+                        </li>
+                    </ul>
+                    Counters update in real time as you change the filters.
+                </li>
+                <li><strong>Map view</strong>
+                    <p>Mouse wheel / pinch to zoom, click+drag / tap+drag to pan, Shift+drag to change rotation and tilt. Hover over any facility for details.</p>
+                    <p>The dataset does not contain GPS coordinates for all facilities, so not all facilities are displayed on the map.</p>
+                </li>
+                <li><strong>Table view</strong>
+                    <p>View all facilities, including ones without GPS coordinates.</p>
+                    <p>Use the pagination controls to navigate (click on the page number to jump to a specific page).</p>
+                    <p>Use the column headers to sort.</p>
+                </li>
             </ul>
 
             <h4>About the data</h4>
@@ -634,6 +650,8 @@
                 <li>Smaller facilities (>2 kW) voluntarily registered for certificates.</li>
                 <li>Facilities subsidized via feed-in tariffs, one-time payments, or investment contributions pursuant to the 2021 Swiss Energy Act.</li>
             </ul>
+
+            <p>The data is current as of 2025-05-21.</p>
 
             <h4>Data sources</h4>
             <p><strong>Swiss Federal Office of Energy (BFE):</strong><br>
