@@ -501,6 +501,19 @@
         .view-toggle-btn:hover {
             background: #1976D2;
         }
+        #searchInput {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        #searchInput:focus {
+            border-color: #2196F3;
+            outline: none;
+        }
     </style>
 </head>
 <body>
@@ -594,6 +607,10 @@
                 </div>
             </div>
         </div>
+        <div class="control-section">
+            <h3>Search</h3>
+            <input type="text" id="searchInput" placeholder="(e.g., 'vs hydro', '2024 basel', 'biomass', ...)" />
+        </div>
         <div class="facility-count" id="facilityCount">Loading...</div>
     </div>
 
@@ -642,6 +659,7 @@
         let selectedCategories = [];     // Categories that are currently selected
         let minPower = 0.1;              // Minimum power output (in kW)
         let maxPower = 2000000;          // Maximum power output (in kW)
+        let searchTokens = [];           // Current search tokens
 
         // Table view state
         let isTableView = false;
@@ -742,6 +760,22 @@
             });
         }
 
+        function facilityMatchesSearch(f) {
+            if (searchTokens.length === 0) return true;
+
+            // Fields to search: Energy Source, Power, Municipality, Canton, Date started
+            const searchableText = [
+                f.SubCategory || '',
+                (f.TotalPower || '').toString(),
+                f.Municipality || '',
+                f.Canton || '',
+                f.BeginningOfOperation || ''
+            ].join(' ').toLowerCase();
+
+            // All tokens must be found as substrings
+            return searchTokens.every(token => searchableText.includes(token));
+        }
+
         function sortFacilities(column, direction) {
             facilities.sort((a, b) => {
                 let aVal, bVal;
@@ -839,7 +873,15 @@
             }
         }
         function setupEventListeners() {
-            // Category checkboxes - use event delegation on the table.
+            setupCategoryCheckboxEvents();
+            setupPowerRangeSlider();
+            setupSearch();
+            setupViewToggle();
+            setupTableSorting();
+            setupPagination();
+        }
+
+        function setupCategoryCheckboxEvents() {
             document.getElementById('categoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
                     selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:checked')).map(cb => cb.value);
@@ -847,8 +889,9 @@
                     updateTableOrMap();
                 }
             });
+        }
 
-            // Power range slider events
+        function setupPowerRangeSlider() {
             const powerRangeSlider = document.getElementById('powerRangeSlider');
             powerRangeSlider.noUiSlider.on('update', function(values, handle) {
                 minPower = Math.pow(10, values[0] - 1);
@@ -871,34 +914,38 @@
                 updateCategoriesAndTotals();
                 updateTableOrMap();
             });
+        }
 
-            setupViewToggle();
-            setupTableSorting();
-            setupPagination();
+        function setupSearch() {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.addEventListener('input', (e) => {
+                const searchText = e.target.value;
+                searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+                updateCategoriesAndTotals();
+                updateTableOrMap();
+            });
         }
 
         function setupViewToggle() {
             const viewToggle = document.getElementById('viewToggle');
-            viewToggle.addEventListener('click', toggleView);
-        }
+            viewToggle.addEventListener('click', () => {
+                isTableView = !isTableView;
+                const mapContainer = document.getElementById('map');
+                const tableContainer = document.getElementById('tableView');
+                const toggleButton = document.getElementById('viewToggle');
 
-        function toggleView() {
-            isTableView = !isTableView;
-            const mapContainer = document.getElementById('map');
-            const tableContainer = document.getElementById('tableView');
-            const toggleButton = document.getElementById('viewToggle');
-
-            if (isTableView) {
-                mapContainer.style.display = 'none';
-                tableContainer.style.display = 'block';
-                toggleButton.textContent = '🗺️ Map View';
-                updateTable();
-            } else {
-                mapContainer.style.display = 'block';
-                tableContainer.style.display = 'none';
-                toggleButton.textContent = '📊 Table View';
-                updateMap();
-            }
+                if (isTableView) {
+                    mapContainer.style.display = 'none';
+                    tableContainer.style.display = 'block';
+                    toggleButton.textContent = '🗺️ Map View';
+                    updateTable();
+                } else {
+                    mapContainer.style.display = 'block';
+                    tableContainer.style.display = 'none';
+                    toggleButton.textContent = '📊 Table View';
+                    updateMap();
+                }
+            });
         }
 
         function setupTableSorting() {
@@ -1079,7 +1126,6 @@
             input.focus();
             input.select();
 
-            // Handle input completion
             const finishEdit = () => {
                 const pageNumber = parseInt(input.value);
                 if (pageNumber >= 1 && pageNumber <= totalPages) {
@@ -1131,6 +1177,7 @@
 
             facilities
                 .filter(f => f.TotalPower >= minPower && f.TotalPower <= maxPower)
+                .filter(f => facilityMatchesSearch(f))
                 .forEach(f => {
                     const category = f.SubCategory;
 
@@ -1147,7 +1194,6 @@
                         totalCount++;
                     }
                 });
-
             // Update category display elements
             categories.forEach(category => {
                 const stats = categoryStats[category];
@@ -1163,11 +1209,9 @@
         }
 
         function updateTotals() {
-            filteredFacilities = facilities.filter(f =>
-                selectedCategories.includes(f.SubCategory) &&
-                f.TotalPower >= minPower &&
-                f.TotalPower <= maxPower
-            );
+            filteredFacilities = facilities
+                .filter(f => selectedCategories.includes(f.SubCategory) && f.TotalPower >= minPower && f.TotalPower <= maxPower)
+                .filter(f => facilityMatchesSearch(f));
             const totalCount = filteredFacilities.length;
             const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
 
