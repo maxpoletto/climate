@@ -785,9 +785,10 @@
             const searchableText = [
                 f.SubCategory || '',
                 (f.TotalPower || '').toString(),
-                f.Municipality || '',
-                f.Canton || '',
-                f.BeginningOfOperation || ''
+                f.BeginningOfOperation || '',
+                'city:' + (f.Municipality || ''),
+                'canton:' + (f.Canton || ''),
+                'year:' + (f.BeginningOfOperation || '').slice(0, 4),
             ].join(' ').toLowerCase();
 
             // All tokens must be found as substrings
