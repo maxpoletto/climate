@@ -11,7 +11,26 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script>
+        // Register zoom plugin once all scripts are loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Chart !== 'undefined') {
+                // Try different ways to register the zoom plugin
+                if (window.ChartZoom) {
+                    Chart.register(window.ChartZoom);
+                    console.log('Registered zoom plugin from window.ChartZoom');
+                } else if (Chart.Zoom) {
+                    Chart.register(Chart.Zoom);
+                    console.log('Registered zoom plugin from Chart.Zoom');
+                } else {
+                    console.log('Checking window object for zoom plugin...');
+                    console.log('Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('zoom')));
+                }
+            }
+        });
+    </script>
     <style>
         html, body {margin: 0; height: 100%; overflow: hidden}
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -539,8 +558,30 @@
             border-bottom: 1px solid #ddd;
             background: #f9f9f9;
             display: flex;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
+        }
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .chart-help {
+            font-size: 11px;
+            color: #666;
+            margin-right: 15px;
+        }
+        .reset-zoom-btn {
+            padding: 6px 12px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+        .reset-zoom-btn:hover {
+            background: #e8e8e8;
         }
         #productionChartContainer {
             flex: 1;
@@ -550,6 +591,10 @@
         #productionChart {
             width: 100% !important;
             height: 100% !important;
+            user-select: none;
+            -moz-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
         }
         .mode-toggle-btn {
             width: 100%;
@@ -639,6 +684,10 @@
         <div id="productionContainer">
             <div id="productionHeader">
                 <h3>Swiss Energy Production Over Time</h3>
+                <div class="chart-controls">
+                    <span class="chart-help">Mouse wheel: zoom • Click+drag to pan (when zoomed in)</span>
+                    <button id="resetZoom" class="reset-zoom-btn">Reset Zoom</button>
+                </div>
             </div>
             <div id="productionChartContainer">
                 <canvas id="productionChart"></canvas>
@@ -1094,6 +1143,47 @@
             setupPagination();
             setupModeToggle();
             setupProductionCheckboxEvents();
+            setupChartControls();
+        }
+
+        function setupChartControls() {
+            const resetZoomBtn = document.getElementById('resetZoom');
+            resetZoomBtn.addEventListener('click', () => {
+                if (productionChart) {
+                    productionChart.resetZoom();
+                }
+            });
+
+            // Check if zoom plugin is available
+            console.log('Chart.js version:', Chart.version);
+            console.log('Chart object:', Chart);
+            console.log('Chart.registry:', Chart.registry);
+            console.log('Zoom plugin available:', typeof Chart.Zoom !== 'undefined');
+            console.log('Window.chartjs-plugin-zoom:', typeof window['chartjs-plugin-zoom'] !== 'undefined');
+
+            // Try to register the zoom plugin if it exists
+            if (typeof window.ChartZoom !== 'undefined') {
+                Chart.register(window.ChartZoom);
+                console.log('Registered ChartZoom plugin');
+            } else if (typeof Chart.Zoom !== 'undefined') {
+                Chart.register(Chart.Zoom);
+                console.log('Registered Chart.Zoom plugin');
+            } else {
+                console.warn('Zoom plugin not found - trying manual registration');
+                // Try to register from window object
+                const possibleZoomPlugins = ['chartjs-plugin-zoom', 'ChartZoom', 'zoom'];
+                for (const name of possibleZoomPlugins) {
+                    if (window[name]) {
+                        try {
+                            Chart.register(window[name]);
+                            console.log(`Successfully registered zoom plugin as ${name}`);
+                            break;
+                        } catch (e) {
+                            console.log(`Failed to register ${name}:`, e);
+                        }
+                    }
+                }
+            }
         }
 
         function setupCategoryCheckboxEvents() {
@@ -1558,7 +1648,7 @@
             }
         });
 
-        function createProductionChart() {
+                function createProductionChart() {
             const ctx = document.getElementById('productionChart').getContext('2d');
 
             productionChart = new Chart(ctx, {
@@ -1566,13 +1656,17 @@
                 data: {
                     datasets: []
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
+                                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        onHover: (event, activeElements, chart) => {
+                            const canvas = chart.canvas;
+                            canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
+                        },
                     plugins: {
                         legend: {
                             position: 'top',
@@ -1582,18 +1676,31 @@
                             text: 'Swiss Energy Production Over Time (GWh/day)'
                         },
                         zoom: {
-                            pan: {
-                                enabled: true,
-                                mode: 'x',
-                            },
                             zoom: {
                                 wheel: {
                                     enabled: true,
+                                    speed: 0.1
                                 },
                                 pinch: {
                                     enabled: true
                                 },
+                                drag: {
+                                    enabled: false
+                                },
                                 mode: 'x',
+                                onZoomComplete: function(chart) {
+                                    updateTimeUnit(chart);
+                                }
+                            },
+                            pan: {
+                                enabled: true,
+                                mode: 'x'
+                            },
+                            limits: {
+                                x: {
+                                    min: 'original',
+                                    max: 'original'
+                                }
                             }
                         }
                     },
@@ -1603,7 +1710,11 @@
                             time: {
                                 unit: 'month',
                                 displayFormats: {
-                                    month: 'MMM yyyy'
+                                    day: 'MMM dd',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy',
+                                    quarter: 'MMM yyyy',
+                                    year: 'yyyy'
                                 }
                             },
                             title: {
@@ -1623,6 +1734,101 @@
             });
         }
 
+        function updateTimeUnit(chart) {
+            if (!chart || !chart.scales || !chart.scales.x) {
+                console.warn('Chart scales not available for time unit update');
+                return;
+            }
+
+            const xScale = chart.scales.x;
+            if (!xScale.max || !xScale.min) {
+                return;
+            }
+
+            const range = xScale.max - xScale.min;
+            const msPerDay = 24 * 60 * 60 * 1000;
+            const days = range / msPerDay;
+
+            let unit = 'month';
+            if (days <= 90) unit = 'day';
+            else if (days <= 365) unit = 'week';
+            else if (days <= 1095) unit = 'month'; // 3 years
+            else unit = 'year';
+
+            if (chart.options.scales.x.time.unit !== unit) {
+                chart.options.scales.x.time.unit = unit;
+                chart.update('none'); // Update without animation
+            }
+        }
+
+                function downsampleData(data, maxPoints = 1000) {
+            if (data.length <= maxPoints) {
+                return data;
+            }
+
+            // Use a more aggressive downsampling for very large datasets
+            let targetPoints = maxPoints;
+            if (data.length > 5000) {
+                targetPoints = Math.min(500, maxPoints); // Much more aggressive for 10+ years of data
+            }
+
+            const step = Math.ceil(data.length / targetPoints);
+            const downsampled = [];
+
+            for (let i = 0; i < data.length; i += step) {
+                const chunk = data.slice(i, Math.min(i + step, data.length));
+                if (chunk.length === 0) continue;
+
+                // Calculate median values instead of average to reduce noise
+                const medianRecord = {
+                    date: chunk[Math.floor(chunk.length / 2)].date,
+                    prod: new Array(6).fill(0)
+                };
+
+                // For each energy source, calculate median
+                for (let sourceIndex = 0; sourceIndex < 6; sourceIndex++) {
+                    const values = chunk.map(record => record.prod[sourceIndex]).sort((a, b) => a - b);
+                    const mid = Math.floor(values.length / 2);
+                    medianRecord.prod[sourceIndex] = values.length % 2 === 0
+                        ? (values[mid - 1] + values[mid]) / 2
+                        : values[mid];
+                }
+
+                downsampled.push(medianRecord);
+            }
+
+            // Apply additional smoothing using moving average
+            return applyMovingAverage(downsampled, 3);
+        }
+
+        function applyMovingAverage(data, windowSize) {
+            if (data.length <= windowSize) return data;
+
+            const smoothed = [];
+            const halfWindow = Math.floor(windowSize / 2);
+
+            for (let i = 0; i < data.length; i++) {
+                const start = Math.max(0, i - halfWindow);
+                const end = Math.min(data.length, i + halfWindow + 1);
+                const window = data.slice(start, end);
+
+                const avgRecord = {
+                    date: data[i].date,
+                    prod: new Array(6).fill(0)
+                };
+
+                window.forEach(record => {
+                    record.prod.forEach((value, index) => {
+                        avgRecord.prod[index] += value / window.length;
+                    });
+                });
+
+                smoothed.push(avgRecord);
+            }
+
+            return smoothed;
+        }
+
         function updateProductionChart() {
             if (productionData.length === 0) {
                 console.warn('No production data available');
@@ -1633,6 +1839,10 @@
                 createProductionChart();
             }
 
+            // More aggressive downsampling - reduce 10+ years to ~500 points
+            const downsampledData = downsampleData(productionData, 500);
+            console.log(`Downsampled from ${productionData.length} to ${downsampledData.length} points`);
+
             // Create datasets for selected categories
             const datasets = [];
 
@@ -1640,7 +1850,7 @@
                 const categoryIndex = productionCategories.indexOf(category);
                 if (categoryIndex === -1) return;
 
-                const data = productionData.map(record => ({
+                const data = downsampledData.map(record => ({
                     x: new Date(record.date),
                     y: record.prod[categoryIndex]
                 }));
@@ -1652,13 +1862,25 @@
                     backgroundColor: `rgba(${PRODUCTION_COLORS[category].join(',')}, 0.2)`,
                     borderWidth: 2,
                     fill: false,
-                    tension: 0.1,
+                    tension: 0.2, // Slightly more smoothing
                     pointRadius: 0,
                     pointHoverRadius: 4
                 });
             });
 
             productionChart.data.datasets = datasets;
+
+            // Set zoom and pan limits to data range
+            if (downsampledData.length > 0) {
+                const minDate = new Date(downsampledData[0].date);
+                const maxDate = new Date(); // Today
+
+                productionChart.options.scales.x.min = minDate;
+                productionChart.options.scales.x.max = maxDate;
+                productionChart.options.plugins.zoom.limits.x.min = minDate;
+                productionChart.options.plugins.zoom.limits.x.max = maxDate;
+            }
+
             productionChart.update();
         }
 
