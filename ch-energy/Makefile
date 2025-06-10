@@ -1,33 +1,18 @@
-.PHONY: all clean serve help
+.PHONY: serve clean deps
 
-# Default target
-all: app/ElectricityProductionPlant.json
+JSON_FILES = app/data/facilities.json app/data/prod.json
 
-# Decompress the JSON data file if it doesn't exist or is older than the .gz file
-app/ElectricityProductionPlant.json: app/ElectricityProductionPlant.json.gz
-	@echo "Decompressing data file..."
-	gunzip -k $<
-	@echo "✅ Data file ready"
-
-# Start development server
-serve: app/ElectricityProductionPlant.json
+serve: $(JSON_FILES) deps
 	@echo "Starting development server..."
 	cd app && python3 -m http.server 8000
 
-# Install Python dependencies
+%.json: %.json.gz
+	@echo "Decompressing $@"
+	gunzip -k $<
+
 deps:
 	pip3.12 install -r requirements.txt
 
-# Clean up generated files
 clean:
 	@echo "Cleaning up..."
-	rm -f app/ElectricityProductionPlant.json
-	@echo "✅ Cleaned"
-
-# Show help
-help:
-	@echo "Available commands:"
-	@echo "  make          - Decompress data file"
-	@echo "  make serve    - Start development server (auto-decompresses if needed)"
-	@echo "  make clean    - Remove decompressed data file"
-	@echo "  make help     - Show this help" 
+	rm -f $(JSON_FILES)

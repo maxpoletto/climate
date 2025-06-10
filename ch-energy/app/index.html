@@ -739,7 +739,7 @@
 
         async function loadData() {
             try {
-                const response = await fetch('ElectricityProductionPlant.json');
+                const response = await fetch('data/facilities.json');
                 facilities = await response.json();
                 numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
 
