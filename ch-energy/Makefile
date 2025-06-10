@@ -1,8 +1,11 @@
-.PHONY: serve clean deps
+.PHONY: testfiles serve clean deps
 
 JSON_FILES = app/data/facilities.json app/data/prod.json
 
-serve: $(JSON_FILES) deps
+testfiles: $(JSON_FILES)
+	@echo "Test files are up to date"
+
+serve: testfiles deps
 	@echo "Starting development server..."
 	cd app && python3 -m http.server 8000
 
