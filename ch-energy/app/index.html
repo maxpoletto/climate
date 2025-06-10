@@ -9,6 +9,9 @@
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <style>
         html, body {margin: 0; height: 100%; overflow: hidden}
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
@@ -514,6 +517,67 @@
             border-color: #2196F3;
             outline: none;
         }
+
+        /* Production view styles */
+        #productionView {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 320px; /* Leave space for controls panel */
+            background: white;
+            overflow: hidden;
+            display: none;
+        }
+        #productionContainer {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        #productionHeader {
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            background: #f9f9f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #productionChartContainer {
+            flex: 1;
+            padding: 20px;
+            overflow: hidden;
+        }
+        #productionChart {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .mode-toggle-btn {
+            width: 100%;
+            padding: 8px;
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.3s;
+            margin-bottom: 8px;
+        }
+        .mode-toggle-btn:hover {
+            background: #e8e8e8;
+        }
+        .mode-toggle-btn.active {
+            background: #2196F3;
+            color: white;
+            border-color: #1976D2;
+        }
+        .production-controls {
+            display: none;
+        }
+        .production-controls.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -571,11 +635,25 @@
             </div>
         </div>
     </div>
+    <div id="productionView">
+        <div id="productionContainer">
+            <div id="productionHeader">
+                <h3>Swiss Energy Production Over Time</h3>
+            </div>
+            <div id="productionChartContainer">
+                <canvas id="productionChart"></canvas>
+            </div>
+        </div>
+    </div>
     <div id="controls">
         <div class="control-section">
+            <button id="facilitiesMode" class="mode-toggle-btn active">🏭 Facilities</button>
+            <button id="productionMode" class="mode-toggle-btn">⚡ Production</button>
+        </div>
+        <div class="control-section facilities-controls">
             <button id="viewToggle" class="view-toggle-btn">📊 Table View</button>
         </div>
-        <div class="control-section">
+        <div class="control-section facilities-controls">
             <h3>Energy Sources</h3>
             <table id="categoryTable" class="category-table">
                 <thead>
@@ -597,7 +675,7 @@
                 </tfoot>
             </table>
         </div>
-        <div class="control-section">
+        <div class="control-section facilities-controls">
             <h3>Power Range: <span id="currentPowerRange">0.1 kW - 2 GW</span></h3>
             <div class="power-control">
                 <div id="powerRangeSlider"></div>
@@ -607,9 +685,23 @@
                 </div>
             </div>
         </div>
-        <div class="control-section">
+        <div class="control-section facilities-controls">
             <h3>Search</h3>
             <input type="text" id="searchInput" placeholder="(e.g., 'canton:vs', 'year:2021', 'zürich', ...)" />
+        </div>
+        <div class="control-section production-controls">
+            <h3>Energy Sources</h3>
+            <table id="productionCategoryTable" class="category-table">
+                <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Avg GWh</th>
+                    </tr>
+                </thead>
+                <tbody id="productionCategoryTableBody">
+                    <!-- Table rows will be populated dynamically -->
+                </tbody>
+            </table>
         </div>
         <div class="facility-count" id="facilityCount">Loading...</div>
     </div>
@@ -687,6 +779,20 @@
         let currentPage = 1;
         let facilitiesPerPage = 50;      // Show 50 facilities per page
 
+        // Production data state
+        let productionData = [];         // Historical production data
+        let isProductionMode = false;    // Whether we're in production mode vs facilities mode
+        let productionChart = null;      // Chart.js instance
+        let selectedProductionCategories = []; // Selected production categories
+        let productionCategories = [     // Production categories (from prod.json.gz)
+            'Hydro (pumped)',
+            'Hydro (river)',
+            'Nuclear',
+            'Photovoltaic',
+            'Thermal',
+            'Wind'
+        ];
+
         // Color palette for different categories
         const CATEGORY_COLORS = {
             'Photovoltaic': [255, 193, 7],         // Amber/Yellow - solar
@@ -697,6 +803,16 @@
             'Waste': [158, 158, 158],              // Gray - waste
             'Nuclear energy': [156, 39, 176],      // Purple - nuclear
             'Crude oil': [96, 125, 139]            // Blue-gray - oil
+        };
+
+        // Color palette for production categories (same colors as categories for matching categories)
+        const PRODUCTION_COLORS = {
+            'Hydro (pumped)': [33, 150, 243],      // Blue
+            'Hydro (river)': [21, 101, 192],       // Darker blue
+            'Nuclear': [156, 39, 176],             // Purple
+            'Photovoltaic': [255, 193, 7],         // Amber/Yellow
+            'Thermal': [255, 87, 34],              // Orange-red
+            'Wind': [76, 175, 80]                  // Green
         };
 
         function initialize() {
@@ -737,30 +853,39 @@
             loadData();
         }
 
+        function initializeUI() {
+            initializePowerSlider();
+            setupCategoryCheckboxes();
+            setupProductionControls();
+            setDefaultSort();
+            updateCategoriesAndTotals();
+            setupEventListeners();
+            updateTableOrMap();
+        }
+
         async function loadData() {
             try {
-                const response = await fetch('data/facilities.json');
-                facilities = await response.json();
+                const facilitiesResponse = await fetch('data/facilities.json');
+                facilities = await facilitiesResponse.json();
                 numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
+
+                const productionResponse = await fetch('data/prod.json');
+                productionData = await productionResponse.json();
+                selectedProductionCategories = [...productionCategories];
 
                 // Hide loading overlay
                 document.getElementById('loadingOverlay').style.display = 'none';
 
-                initializePowerSlider();
-                setupCategoryCheckboxes();
-                setDefaultSort();
-
-                updateCategoriesAndTotals();
-                setupEventListeners();
-                updateTableOrMap();
+                initializeUI();
 
                 console.log(`Loaded ${facilities.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
+                console.log(`Loaded ${productionData.length} days of production data`);
             } catch (error) {
                 console.error('Error loading data:', error);
                 document.getElementById('loadingOverlay').innerHTML = `
                     <div class="loading-content">
                         <h3>Error Loading Data</h3>
-                        <p>Failed to load facility data. Please refresh the page.</p>
+                        <p>Failed to load data. Please refresh the page.</p>
                     </div>
                 `;
             }
@@ -892,6 +1017,74 @@
                 updateMap();
             }
         }
+        function setupProductionControls() {
+            const container = document.getElementById('productionCategoryTableBody');
+
+            productionCategories.forEach((category, index) => {
+                const tr = document.createElement('tr');
+
+                // Source column with checkbox and color indicator
+                const sourceCell = document.createElement('td');
+                sourceCell.className = 'source-cell';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'category-checkbox';
+                checkbox.id = `prod-cat-${index}`;
+                checkbox.value = category;
+                checkbox.checked = true;
+
+                const label = document.createElement('label');
+                label.className = 'category-label';
+                label.htmlFor = checkbox.id;
+
+                const colorIndicator = document.createElement('span');
+                colorIndicator.className = 'color-indicator';
+                const color = PRODUCTION_COLORS[category] || [128, 128, 128];
+                colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
+
+                const text = document.createElement('span');
+                text.textContent = category;
+
+                label.appendChild(colorIndicator);
+                label.appendChild(text);
+                sourceCell.appendChild(checkbox);
+                sourceCell.appendChild(label);
+
+                // Average column
+                const avgCell = document.createElement('td');
+                avgCell.className = 'count-cell';
+                avgCell.id = `prod-avg-${index}`;
+
+                tr.appendChild(sourceCell);
+                tr.appendChild(avgCell);
+                container.appendChild(tr);
+            });
+
+            updateProductionStats();
+        }
+
+        function updateProductionStats() {
+            if (productionData.length === 0) return;
+
+            // Calculate averages for each category
+            const totals = new Array(6).fill(0);
+            const count = productionData.length;
+
+            productionData.forEach(record => {
+                record.prod.forEach((value, index) => {
+                    totals[index] += value;
+                });
+            });
+
+            productionCategories.forEach((category, index) => {
+                const avgElement = document.getElementById(`prod-avg-${index}`);
+                if (avgElement) {
+                    const avg = totals[index] / count;
+                    avgElement.textContent = avg.toFixed(1);
+                }
+            });
+        }
+
         function setupEventListeners() {
             setupCategoryCheckboxEvents();
             setupPowerRangeSlider();
@@ -899,6 +1092,8 @@
             setupViewToggle();
             setupTableSorting();
             setupPagination();
+            setupModeToggle();
+            setupProductionCheckboxEvents();
         }
 
         function setupCategoryCheckboxEvents() {
@@ -953,9 +1148,58 @@
             });
         }
 
+        function setupModeToggle() {
+            const facilitiesBtn = document.getElementById('facilitiesMode');
+            const productionBtn = document.getElementById('productionMode');
+
+            facilitiesBtn.addEventListener('click', () => {
+                if (!isProductionMode) return;
+
+                isProductionMode = false;
+                facilitiesBtn.classList.add('active');
+                productionBtn.classList.remove('active');
+
+                // Show facilities controls, hide production controls
+                document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
+                document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+
+                // Show appropriate view
+                document.getElementById('productionView').style.display = 'none';
+                if (isTableView) {
+                    document.getElementById('tableView').style.display = 'block';
+                    document.getElementById('map').style.display = 'none';
+                } else {
+                    document.getElementById('tableView').style.display = 'none';
+                    document.getElementById('map').style.display = 'block';
+                }
+            });
+
+            productionBtn.addEventListener('click', () => {
+                if (isProductionMode) return;
+
+                isProductionMode = true;
+                productionBtn.classList.add('active');
+                facilitiesBtn.classList.remove('active');
+
+                // Hide facilities controls, show production controls
+                document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+
+                // Show production view
+                document.getElementById('map').style.display = 'none';
+                document.getElementById('tableView').style.display = 'none';
+                document.getElementById('productionView').style.display = 'block';
+
+                // Initialize or update the chart
+                updateProductionChart();
+            });
+        }
+
         function setupViewToggle() {
             const viewToggle = document.getElementById('viewToggle');
             viewToggle.addEventListener('click', () => {
+                if (isProductionMode) return; // No effect in production mode
+
                 isTableView = !isTableView;
                 const mapContainer = document.getElementById('map');
                 const tableContainer = document.getElementById('tableView');
@@ -971,6 +1215,17 @@
                     tableContainer.style.display = 'none';
                     toggleButton.textContent = '📊 Table View';
                     updateMap();
+                }
+            });
+        }
+
+        function setupProductionCheckboxEvents() {
+            document.getElementById('productionCategoryTableBody').addEventListener('change', function(e) {
+                if (e.target.type === 'checkbox') {
+                    selectedProductionCategories = Array.from(
+                        document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:checked')
+                    ).map(cb => cb.value);
+                    updateProductionChart();
                 }
             });
         }
@@ -1302,6 +1557,110 @@
                 infoModal.classList.remove('show');
             }
         });
+
+        function createProductionChart() {
+            const ctx = document.getElementById('productionChart').getContext('2d');
+
+            productionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: 'Swiss Energy Production Over Time (GWh/day)'
+                        },
+                        zoom: {
+                            pan: {
+                                enabled: true,
+                                mode: 'x',
+                            },
+                            zoom: {
+                                wheel: {
+                                    enabled: true,
+                                },
+                                pinch: {
+                                    enabled: true
+                                },
+                                mode: 'x',
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'month',
+                                displayFormats: {
+                                    month: 'MMM yyyy'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Production (GWh/day)'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateProductionChart() {
+            if (productionData.length === 0) {
+                console.warn('No production data available');
+                return;
+            }
+
+            if (!productionChart) {
+                createProductionChart();
+            }
+
+            // Create datasets for selected categories
+            const datasets = [];
+
+            selectedProductionCategories.forEach((category, index) => {
+                const categoryIndex = productionCategories.indexOf(category);
+                if (categoryIndex === -1) return;
+
+                const data = productionData.map(record => ({
+                    x: new Date(record.date),
+                    y: record.prod[categoryIndex]
+                }));
+
+                datasets.push({
+                    label: category,
+                    data: data,
+                    borderColor: `rgb(${PRODUCTION_COLORS[category].join(',')})`,
+                    backgroundColor: `rgba(${PRODUCTION_COLORS[category].join(',')}, 0.2)`,
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 4
+                });
+            });
+
+            productionChart.data.datasets = datasets;
+            productionChart.update();
+        }
 
         // Initialize everything once data loads
         initialize();
