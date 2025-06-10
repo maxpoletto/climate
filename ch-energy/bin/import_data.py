@@ -13,7 +13,7 @@ Downloaded files are stored in /tmp/ch-energy/downloads.
 
 Output files:
 - $DEST_ROOT/data/facilities.json.gz (facilities with GPS coordinates and essential fields only)
-- $DEST_ROOT/data/prod.json.gz (historical production data)
+- $DEST_ROOT/data/production.json.gz (historical production data)
 """
 
 import os
@@ -358,7 +358,7 @@ def main():
             if production_data:
                 save_compressed_json(
                     production_data,
-                    os.path.join(args.dest_root, 'data', 'prod.json.gz'),
+                    os.path.join(args.dest_root, 'data', 'production.json.gz'),
                     'production data'
                 )
 

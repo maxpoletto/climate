@@ -869,7 +869,7 @@
                 facilities = await facilitiesResponse.json();
                 numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
 
-                const productionResponse = await fetch('data/prod.json');
+                const productionResponse = await fetch('data/production.json');
                 productionData = await productionResponse.json();
                 selectedProductionCategories = [...productionCategories];
 
