@@ -685,7 +685,7 @@
         <div id="productionContainer">
             <div id="productionHeader">
                 <div class="chart-controls">
-                    <span class="chart-help">Mouse wheel: zoom • Click+drag to pan (when zoomed in)</span>
+                    <span class="chart-help">Mouse wheel: zoom • Click+drag to pan • Bars adapt: daily→weekly→monthly→quarterly</span>
                     <button id="resetZoom" class="reset-zoom-btn">Reset Zoom</button>
                 </div>
             </div>
@@ -1648,32 +1648,33 @@
             }
         });
 
-                function createProductionChart() {
+        function createProductionChart() {
             const ctx = document.getElementById('productionChart').getContext('2d');
 
             productionChart = new Chart(ctx, {
-                type: 'line',
+                type: 'bar',
                 data: {
                     datasets: []
                 },
-                                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        interaction: {
-                            mode: 'index',
-                            intersect: false,
-                        },
-                        onHover: (event, activeElements, chart) => {
-                            const canvas = chart.canvas;
-                            canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
-                        },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    animation: false,
+                    onHover: (event, activeElements, chart) => {
+                        const canvas = chart.canvas;
+                        canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
+                    },
                     plugins: {
                         legend: {
                             position: 'top',
                         },
                         title: {
                             display: true,
-                            text: 'Swiss Energy Production Over Time (GWh/day)'
+                            text: 'Swiss energy production over time'
                         },
                         zoom: {
                             zoom: {
@@ -1688,8 +1689,8 @@
                                     enabled: false
                                 },
                                 mode: 'x',
-                                onZoomComplete: function(chart) {
-                                    updateTimeUnit(chart);
+                                onZoomComplete: ({chart}) => {
+                                    updateTimeUnitAndData(chart);
                                 }
                             },
                             pan: {
@@ -1708,10 +1709,10 @@
                         x: {
                             type: 'time',
                             time: {
-                                unit: 'month',
+                                unit: 'quarter',
                                 displayFormats: {
-                                    day: 'MMM dd',
-                                    week: 'MMM dd',
+                                    day: 'dd MMM yyyy',
+                                    week: 'dd MMM yyyy',
                                     month: 'MMM yyyy',
                                     quarter: 'MMM yyyy',
                                     year: 'yyyy'
@@ -1720,21 +1721,102 @@
                             title: {
                                 display: true,
                                 text: 'Date'
-                            }
+                            },
+                            stacked: true
                         },
                         y: {
                             title: {
                                 display: true,
-                                text: 'Production (GWh/day)'
+                                text: 'Production (GWh)'
                             },
-                            beginAtZero: true
+                            beginAtZero: true,
+                            stacked: true
                         }
-                    }
+                    },
+                    datasets: {
+                        bar: {
+                            categoryPercentage: 0.9, // Reduce space between bar groups
+                            barPercentage: 1.0, // Bars take full width of their category
+                        }
+                    },
                 }
             });
         }
 
-        function updateTimeUnit(chart) {
+        function aggregateDataByTimeUnit(data, unit) {
+            const aggregated = {};
+            
+            data.forEach(record => {
+                const date = new Date(record.date);
+                let key;
+                
+                switch(unit) {
+                    case 'day':
+                        key = date.toISOString().split('T')[0]; // YYYY-MM-DD
+                        break;
+                    case 'week':
+                        const weekStart = new Date(date);
+                        weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+                        key = weekStart.toISOString().split('T')[0];
+                        break;
+                    case 'month':
+                        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        break;
+                    case 'quarter':
+                        const quarter = Math.floor(date.getMonth() / 3) + 1;
+                        key = `${date.getFullYear()}-Q${quarter}`;
+                        break;
+                    case 'year':
+                        key = date.getFullYear().toString();
+                        break;
+                    default:
+                        key = record.date;
+                }
+                
+                if (!aggregated[key]) {
+                    aggregated[key] = {
+                        date: key,
+                        prod: new Array(6).fill(0),
+                        count: 0
+                    };
+                }
+                
+                // Sum the production values
+                record.prod.forEach((value, index) => {
+                    aggregated[key].prod[index] += value;
+                });
+                aggregated[key].count += 1;
+            });
+            
+            // Convert back to array and create proper date objects
+            return Object.values(aggregated).map(item => {
+                let dateObj;
+                if (item.date.includes('Q')) {
+                    // Quarter format: YYYY-Q1, YYYY-Q2, etc.
+                    const [year, quarter] = item.date.split('-Q');
+                    const month = (parseInt(quarter) - 1) * 3;
+                    dateObj = new Date(parseInt(year), month, 1);
+                } else if (item.date.length === 4) {
+                    // Year format
+                    dateObj = new Date(parseInt(item.date), 0, 1);
+                } else if (item.date.length === 7) {
+                    // Month format: YYYY-MM
+                    const [year, month] = item.date.split('-');
+                    dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+                } else {
+                    // Day or week format: YYYY-MM-DD
+                    dateObj = new Date(item.date);
+                }
+                
+                return {
+                    date: dateObj.toISOString(),
+                    prod: item.prod
+                };
+            }).sort((a, b) => new Date(a.date) - new Date(b.date));
+        }
+
+        function updateTimeUnitAndData(chart) {
+            console.log('updateTimeUnitAndData', chart);
             if (!chart || !chart.scales || !chart.scales.x) {
                 console.warn('Chart scales not available for time unit update');
                 return;
@@ -1749,84 +1831,17 @@
             const msPerDay = 24 * 60 * 60 * 1000;
             const days = range / msPerDay;
 
-            let unit = 'month';
+            let unit = 'quarter';
             if (days <= 90) unit = 'day';
             else if (days <= 365) unit = 'week';
             else if (days <= 1095) unit = 'month'; // 3 years
-            else unit = 'year';
 
-            if (chart.options.scales.x.time.unit !== unit) {
-                chart.options.scales.x.time.unit = unit;
-                chart.update('none'); // Update without animation
+            console.log('xScale', xScale);
+            if (chart.scales.x.time.unit !== unit) {
+                chart.scales.x.time.unit = unit;
+                // Regenerate chart data with new aggregation
+                updateProductionChart();
             }
-        }
-
-                function downsampleData(data, maxPoints = 1000) {
-            if (data.length <= maxPoints) {
-                return data;
-            }
-
-            // Use a more aggressive downsampling for very large datasets
-            let targetPoints = maxPoints;
-            if (data.length > 5000) {
-                targetPoints = Math.min(500, maxPoints); // Much more aggressive for 10+ years of data
-            }
-
-            const step = Math.ceil(data.length / targetPoints);
-            const downsampled = [];
-
-            for (let i = 0; i < data.length; i += step) {
-                const chunk = data.slice(i, Math.min(i + step, data.length));
-                if (chunk.length === 0) continue;
-
-                // Calculate median values instead of average to reduce noise
-                const medianRecord = {
-                    date: chunk[Math.floor(chunk.length / 2)].date,
-                    prod: new Array(6).fill(0)
-                };
-
-                // For each energy source, calculate median
-                for (let sourceIndex = 0; sourceIndex < 6; sourceIndex++) {
-                    const values = chunk.map(record => record.prod[sourceIndex]).sort((a, b) => a - b);
-                    const mid = Math.floor(values.length / 2);
-                    medianRecord.prod[sourceIndex] = values.length % 2 === 0
-                        ? (values[mid - 1] + values[mid]) / 2
-                        : values[mid];
-                }
-
-                downsampled.push(medianRecord);
-            }
-
-            // Apply additional smoothing using moving average
-            return applyMovingAverage(downsampled, 3);
-        }
-
-        function applyMovingAverage(data, windowSize) {
-            if (data.length <= windowSize) return data;
-
-            const smoothed = [];
-            const halfWindow = Math.floor(windowSize / 2);
-
-            for (let i = 0; i < data.length; i++) {
-                const start = Math.max(0, i - halfWindow);
-                const end = Math.min(data.length, i + halfWindow + 1);
-                const window = data.slice(start, end);
-
-                const avgRecord = {
-                    date: data[i].date,
-                    prod: new Array(6).fill(0)
-                };
-
-                window.forEach(record => {
-                    record.prod.forEach((value, index) => {
-                        avgRecord.prod[index] += value / window.length;
-                    });
-                });
-
-                smoothed.push(avgRecord);
-            }
-
-            return smoothed;
         }
 
         function updateProductionChart() {
@@ -1839,18 +1854,23 @@
                 createProductionChart();
             }
 
-            // More aggressive downsampling - reduce 10+ years to ~500 points
-            const downsampledData = downsampleData(productionData, 500);
-            console.log(`Downsampled from ${productionData.length} to ${downsampledData.length} points`);
+            // Get current time unit from chart options
+            let currentUnit = productionChart.options.scales.x.time.unit || 'quarter';
+            
+            console.log(`Updating chart with unit: ${currentUnit}`);
 
-            // Create datasets for selected categories
+            // Aggregate data based on current time unit
+            const aggregatedData = aggregateDataByTimeUnit(productionData, currentUnit);
+            console.log(`Aggregated ${productionData.length} days into ${aggregatedData.length} ${currentUnit}s`);
+
+            // Create datasets for selected categories (stacked bars)
             const datasets = [];
 
             selectedProductionCategories.forEach((category, index) => {
                 const categoryIndex = productionCategories.indexOf(category);
                 if (categoryIndex === -1) return;
 
-                const data = downsampledData.map(record => ({
+                const data = aggregatedData.map(record => ({
                     x: new Date(record.date),
                     y: record.prod[categoryIndex]
                 }));
@@ -1858,22 +1878,28 @@
                 datasets.push({
                     label: category,
                     data: data,
+                    backgroundColor: `rgba(${PRODUCTION_COLORS[category].join(',')}, 0.8)`,
                     borderColor: `rgb(${PRODUCTION_COLORS[category].join(',')})`,
-                    backgroundColor: `rgba(${PRODUCTION_COLORS[category].join(',')}, 0.2)`,
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.2, // Slightly more smoothing
-                    pointRadius: 0,
-                    pointHoverRadius: 4
+                    borderWidth: 1,
+                    stack: 'production' // All bars in same stack
                 });
             });
 
             productionChart.data.datasets = datasets;
 
+            // Update chart title to reflect current aggregation
+            const unitNames = {
+                'day': 'Daily',
+                'week': 'Weekly', 
+                'month': 'Monthly',
+                'quarter': 'Quarterly'
+            };
+            productionChart.options.plugins.title.text = `Swiss Energy Production Over Time (${unitNames[currentUnit]})`;
+
             // Set zoom and pan limits to data range
-            if (downsampledData.length > 0) {
-                const minDate = new Date(downsampledData[0].date);
-                const maxDate = new Date(); // Today
+            if (aggregatedData.length > 0) {
+                const minDate = new Date(aggregatedData[0].date);
+                const maxDate = new Date(aggregatedData[aggregatedData.length - 1].date);
 
                 productionChart.options.scales.x.min = minDate;
                 productionChart.options.scales.x.max = maxDate;
