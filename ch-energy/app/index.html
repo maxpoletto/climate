@@ -1045,9 +1045,27 @@
             categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
             selectedCategories = [...categories]; // Initialize with all categories selected.
             const container = document.getElementById('categoryTableBody');
+            container.innerHTML = '';
+
+            // Select/Deselect all checkbox
+            const allCheckbox = document.createElement('input');
+            allCheckbox.type = 'checkbox';
+            allCheckbox.className = 'category-checkbox';
+            allCheckbox.id = 'cat-select-all';
+            allCheckbox.checked = true;
+            const allLabel = document.createElement('label');
+            allLabel.htmlFor = 'cat-select-all';
+            allLabel.textContent = 'Select/Deselect All';
+            const allTd = document.createElement('td');
+            allTd.colSpan = 3;
+            allTd.appendChild(allCheckbox);
+            allTd.appendChild(allLabel);
+            let tr = document.createElement('tr');
+            tr.appendChild(allTd);
+            container.appendChild(tr);
 
             categories.forEach(category => {
-                const tr = document.createElement('tr');
+                tr = document.createElement('tr');
 
                 // Source column with checkbox and color indicator
                 const sourceCell = document.createElement('td');
@@ -1102,9 +1120,27 @@
         }
         function setupProductionControls() {
             const container = document.getElementById('productionCategoryTableBody');
+            container.innerHTML = '';
+
+            // Select/Deselect all checkbox
+            const allCheckbox = document.createElement('input');
+            allCheckbox.type = 'checkbox';
+            allCheckbox.className = 'category-checkbox';
+            allCheckbox.id = 'prod-cat-select-all';
+            allCheckbox.checked = true;
+            const allLabel = document.createElement('label');
+            allLabel.htmlFor = 'prod-cat-select-all';
+            allLabel.textContent = 'Select/Deselect All';
+            const allTd = document.createElement('td');
+            allTd.colSpan = 2;
+            allTd.appendChild(allCheckbox);
+            allTd.appendChild(allLabel);
+            let tr = document.createElement('tr');
+            tr.appendChild(allTd);
+            container.appendChild(tr);
 
             productionCategories.forEach((category, index) => {
-                const tr = document.createElement('tr');
+                tr = document.createElement('tr');
 
                 // Source column with checkbox and color indicator
                 const sourceCell = document.createElement('td');
@@ -1187,9 +1223,22 @@
         }
 
         function setupCategoryCheckboxEvents() {
+            const allCheckbox = document.getElementById('cat-select-all');
             document.getElementById('categoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
-                    selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:checked')).map(cb => cb.value);
+                    if (e.target.id === 'cat-select-all') {
+                        // Select/deselect all
+                        const checked = e.target.checked;
+                        document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
+                            if (cb.id !== 'cat-select-all') cb.checked = checked;
+                        });
+                        selectedCategories = checked ? [...categories] : [];
+                    } else {
+                        selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
+                        // Sync select-all checkbox
+                        const allChecked = selectedCategories.length === categories.length;
+                        selectAllCheckbox.checked = allChecked;
+                    }
                     updateTotals();
                     updateTableOrMap();
                 }
@@ -1312,11 +1361,22 @@
         }
 
         function setupProductionCheckboxEvents() {
+            const allCheckbox = document.getElementById('prod-cat-select-all');
             document.getElementById('productionCategoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
-                    selectedProductionCategories = Array.from(
-                        document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:checked')
-                    ).map(cb => cb.value);
+                    if (e.target.id === 'prod-cat-select-all') {
+                        // Select/deselect all
+                        const checked = e.target.checked;
+                        document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
+                            if (cb.id !== 'prod-cat-select-all') cb.checked = checked;
+                        });
+                        selectedProductionCategories = checked ? [...productionCategories] : [];
+                    } else {
+                        selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
+                        // Sync select-all checkbox
+                        const allChecked = selectedProductionCategories.length === productionCategories.length;
+                        allCheckbox.checked = allChecked;
+                    }
                     updateProductionChart();
                 }
             });
