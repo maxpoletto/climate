@@ -17,7 +17,6 @@
         // Register zoom plugin once all scripts are loaded
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof Chart !== 'undefined') {
-                // Try different ways to register the zoom plugin
                 if (Chart.Zoom) {
                     Chart.register(Chart.Zoom);
                     console.log('Registered zoom plugin from Chart.Zoom');
@@ -29,40 +28,6 @@
                     console.log('Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('zoom')));
                 }
             }
-
-            // Check if zoom plugin is available
-            console.log('Chart.js version:', Chart.version);
-            console.log('Chart object:', Chart);
-            console.log('Chart.registry:', Chart.registry);
-            console.log('Zoom plugin available:', typeof Chart.Zoom !== 'undefined');
-            console.log('Window.chartjs-plugin-zoom:', typeof window['chartjs-plugin-zoom'] !== 'undefined');
-
-            /*
-            // Try to register the zoom plugin if it exists
-            if (typeof window.ChartZoom !== 'undefined') {
-                Chart.register(window.ChartZoom);
-                console.log('Registered ChartZoom plugin');
-            } else if (typeof Chart.Zoom !== 'undefined') {
-                Chart.register(Chart.Zoom);
-                console.log('Registered Chart.Zoom plugin');
-            } else {
-                console.warn('Zoom plugin not found - trying manual registration');
-                // Try to register from window object
-                const possibleZoomPlugins = ['chartjs-plugin-zoom', 'ChartZoom', 'zoom'];
-                for (const name of possibleZoomPlugins) {
-                    if (window[name]) {
-                        try {
-                            Chart.register(window[name]);
-                            console.log(`Successfully registered zoom plugin as ${name}`);
-                            break;
-                        } catch (e) {
-                            console.log(`Failed to register ${name}:`, e);
-                        }
-                    }
-                }
-            }
-            */
-
             initialize();
         });
     </script>
@@ -659,6 +624,15 @@
         .production-controls.active {
             display: block;
         }
+        #retryButton {
+            padding: 10px 20px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -958,14 +932,20 @@
         async function loadData() {
             try {
                 const facilitiesResponse = await fetch('data/facilities.json');
+                if (!facilitiesResponse.ok) {
+                    throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
+                }
                 facilities = await facilitiesResponse.json();
                 numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
 
                 const productionResponse = await fetch('data/production.json');
+                if (!productionResponse.ok) {
+                    throw new Error(`Failed to load production data: ${productionResponse.status} ${productionResponse.statusText}`);
+                }
                 productionData = await productionResponse.json();
                 selectedProductionCategories = [...productionCategories];
 
-                // Hide loading overlay
+                // Hide loading overlay after successful data load
                 document.getElementById('loadingOverlay').style.display = 'none';
 
                 initializeUI();
@@ -974,12 +954,23 @@
                 console.log(`Loaded ${productionData.length} days of production data`);
             } catch (error) {
                 console.error('Error loading data:', error);
-                document.getElementById('loadingOverlay').innerHTML = `
+
+                // Show error overlay and halt app initialization
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                loadingOverlay.innerHTML = `
                     <div class="loading-content">
-                        <h3>Error Loading Data</h3>
-                        <p>Failed to load data. Please refresh the page.</p>
+                        <h3>⚠️ Error Loading Data</h3>
+                        <p><strong>Failed to load energy data.</strong></p>
+                        <p style="font-size: 12px; color: #666; margin-top: 15px;">
+                            ${error.message}
+                        </p>
+                        <p style="margin-top: 20px;">
+                            <button id="retryButton" onclick="window.location.reload()">Retry</button>
+                        </p>
                     </div>
                 `;
+                loadingOverlay.style.display = 'flex';
+                return;
             }
         }
 
@@ -1824,12 +1815,6 @@
         }
 
         function updateProductionChart(preserveMinDate, preserveMaxDate) {
-            if (productionData.length === 0) {
-                // TODO: Check this at initialization
-                console.warn('No production data available');
-                return;
-            }
-
             if (!productionChart) {
                 createProductionChart();
             }
