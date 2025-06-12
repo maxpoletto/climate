@@ -18,17 +18,52 @@
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof Chart !== 'undefined') {
                 // Try different ways to register the zoom plugin
-                if (window.ChartZoom) {
-                    Chart.register(window.ChartZoom);
-                    console.log('Registered zoom plugin from window.ChartZoom');
-                } else if (Chart.Zoom) {
+                if (Chart.Zoom) {
                     Chart.register(Chart.Zoom);
                     console.log('Registered zoom plugin from Chart.Zoom');
+                } else if (window.ChartZoom) {
+                    Chart.register(window.ChartZoom);
+                    console.log('Registered zoom plugin from window.ChartZoom');
                 } else {
                     console.log('Checking window object for zoom plugin...');
                     console.log('Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('zoom')));
                 }
             }
+
+            // Check if zoom plugin is available
+            console.log('Chart.js version:', Chart.version);
+            console.log('Chart object:', Chart);
+            console.log('Chart.registry:', Chart.registry);
+            console.log('Zoom plugin available:', typeof Chart.Zoom !== 'undefined');
+            console.log('Window.chartjs-plugin-zoom:', typeof window['chartjs-plugin-zoom'] !== 'undefined');
+
+            /*
+            // Try to register the zoom plugin if it exists
+            if (typeof window.ChartZoom !== 'undefined') {
+                Chart.register(window.ChartZoom);
+                console.log('Registered ChartZoom plugin');
+            } else if (typeof Chart.Zoom !== 'undefined') {
+                Chart.register(Chart.Zoom);
+                console.log('Registered Chart.Zoom plugin');
+            } else {
+                console.warn('Zoom plugin not found - trying manual registration');
+                // Try to register from window object
+                const possibleZoomPlugins = ['chartjs-plugin-zoom', 'ChartZoom', 'zoom'];
+                for (const name of possibleZoomPlugins) {
+                    if (window[name]) {
+                        try {
+                            Chart.register(window[name]);
+                            console.log(`Successfully registered zoom plugin as ${name}`);
+                            break;
+                        } catch (e) {
+                            console.log(`Failed to register ${name}:`, e);
+                        }
+                    }
+                }
+            }
+            */
+
+            initialize();
         });
     </script>
     <style>
@@ -1153,37 +1188,6 @@
                     productionChart.resetZoom();
                 }
             });
-
-            // Check if zoom plugin is available
-            console.log('Chart.js version:', Chart.version);
-            console.log('Chart object:', Chart);
-            console.log('Chart.registry:', Chart.registry);
-            console.log('Zoom plugin available:', typeof Chart.Zoom !== 'undefined');
-            console.log('Window.chartjs-plugin-zoom:', typeof window['chartjs-plugin-zoom'] !== 'undefined');
-
-            // Try to register the zoom plugin if it exists
-            if (typeof window.ChartZoom !== 'undefined') {
-                Chart.register(window.ChartZoom);
-                console.log('Registered ChartZoom plugin');
-            } else if (typeof Chart.Zoom !== 'undefined') {
-                Chart.register(Chart.Zoom);
-                console.log('Registered Chart.Zoom plugin');
-            } else {
-                console.warn('Zoom plugin not found - trying manual registration');
-                // Try to register from window object
-                const possibleZoomPlugins = ['chartjs-plugin-zoom', 'ChartZoom', 'zoom'];
-                for (const name of possibleZoomPlugins) {
-                    if (window[name]) {
-                        try {
-                            Chart.register(window[name]);
-                            console.log(`Successfully registered zoom plugin as ${name}`);
-                            break;
-                        } catch (e) {
-                            console.log(`Failed to register ${name}:`, e);
-                        }
-                    }
-                }
-            }
         }
 
         function setupCategoryCheckboxEvents() {
@@ -1741,6 +1745,7 @@
                     },
                 }
             });
+            console.log('productionChart', productionChart);
         }
 
         function aggregateDataByTimeUnit(data, unit) {
@@ -1816,7 +1821,6 @@
         }
 
         function updateTimeUnitAndData(chart) {
-            console.log('updateTimeUnitAndData', chart);
             if (!chart || !chart.scales || !chart.scales.x) {
                 console.warn('Chart scales not available for time unit update');
                 return;
@@ -1836,15 +1840,26 @@
             else if (days <= 365) unit = 'week';
             else if (days <= 1095) unit = 'month'; // 3 years
 
-            console.log('xScale', xScale);
-            if (chart.scales.x.time.unit !== unit) {
-                chart.scales.x.time.unit = unit;
-                // Regenerate chart data with new aggregation
-                updateProductionChart();
+            // Get current unit from chart OPTIONS, not from scale instance
+            const currentUnit = chart.options.scales.x.time.unit;
+            
+            console.log(`Zoom detected: ${days.toFixed(0)} days visible, unit should be: ${unit}, current: ${currentUnit}`);
+            
+            if (currentUnit !== unit) {
+                console.log(`Changing time unit from ${currentUnit} to ${unit}`);
+                
+                // Store the current zoom range before updating
+                const currentMin = xScale.min;
+                const currentMax = xScale.max;
+                
+                chart.options.scales.x.time.unit = unit;
+                
+                // Regenerate chart data with new aggregation but preserve zoom
+                updateProductionChart(currentMin, currentMax);
             }
         }
 
-        function updateProductionChart() {
+        function updateProductionChart(preserveMinDate, preserveMaxDate) {
             if (productionData.length === 0) {
                 console.warn('No production data available');
                 return;
@@ -1894,24 +1909,33 @@
                 'month': 'Monthly',
                 'quarter': 'Quarterly'
             };
-            productionChart.options.plugins.title.text = `Swiss Energy Production Over Time (${unitNames[currentUnit]})`;
+            productionChart.options.plugins.title.text = `Swiss energy production over time (${unitNames[currentUnit]})`;
 
             // Set zoom and pan limits to data range
             if (aggregatedData.length > 0) {
-                const minDate = new Date(aggregatedData[0].date);
-                const maxDate = new Date(aggregatedData[aggregatedData.length - 1].date);
-
-                productionChart.options.scales.x.min = minDate;
-                productionChart.options.scales.x.max = maxDate;
-                productionChart.options.plugins.zoom.limits.x.min = minDate;
-                productionChart.options.plugins.zoom.limits.x.max = maxDate;
+                // Always set the overall limits to the full data range
+                const fullMinDate = new Date(aggregatedData[0].date);
+                const fullMaxDate = new Date(aggregatedData[aggregatedData.length - 1].date);
+                
+                productionChart.options.plugins.zoom.limits.x.min = fullMinDate;
+                productionChart.options.plugins.zoom.limits.x.max = fullMaxDate;
+                
+                // If we have preserved zoom dates, use those; otherwise use full range
+                if (preserveMinDate && preserveMaxDate) {
+                    productionChart.options.scales.x.min = preserveMinDate;
+                    productionChart.options.scales.x.max = preserveMaxDate;
+                    console.log(`Preserved zoom range: ${preserveMinDate.toISOString().split('T')[0]} to ${preserveMaxDate.toISOString().split('T')[0]}`);
+                } else {
+                    productionChart.options.scales.x.min = fullMinDate;
+                    productionChart.options.scales.x.max = fullMaxDate;
+                }
             }
 
             productionChart.update();
         }
 
         // Initialize everything once data loads
-        initialize();
+        // initialize();
     </script>
 </body>
 </html>
