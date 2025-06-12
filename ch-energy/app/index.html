@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
-    <title>Swiss Energy Facilities</title>
+    <title>Swiss Energy Explorer</title>
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
@@ -322,7 +322,7 @@
             background: white;
             border-radius: 8px;
             padding: 25px;
-            max-width: 500px;
+            max-width: 800px;
             max-height: 80vh;
             overflow-y: auto;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -647,8 +647,8 @@
     <div id="loadingOverlay">
         <div class="loading-content">
             <div class="loading-spinner"></div>
-            <h3>Loading Swiss Energy Facilities</h3>
-            <p>Fetching data for 290,000+ facilities...</p>
+            <h3>Loading Swiss energy data</h3>
+            <p>Fetching data for 290,000+ facilities and 4,000+ production days...</p>
         </div>
     </div>
 
@@ -777,50 +777,68 @@
     <div class="info-modal" id="infoModal">
         <div class="info-modal-content">
             <button class="close-modal" id="closeModal">&times;</button>
-            <h3>Swiss Energy Facilities Map</h3>
+            <h3>Swiss Energy Explorer</h3>
+
+            <p>This tool displays electricity generation facilities in Switzerland and daily Swiss electricity production since 2015.</p>
 
             <h4>Instructions</h4>
             <ul>
+                <li><strong>Facilities / Production mode toggle</strong>
+                    <p>Click the <strong>Facilities</strong> or <strong>Production</strong> button to switch between facilities and production mode.</p>
+                </li>
+                <li><strong>Table / Map view toggle</strong>
+                    <p>Within facilities mode, click <strong>Table View</strong> to switch from map to table, or <strong>Map View</strong> to switch from table to map.</p>
+                </li>
                 <li><strong>Energy sources panel</strong>
-                    <p>Controls what facilities are displayed in map and table view.</p>
+                    <p>Controls what facilities are displayed and counted.</p>
                     <ul>
                         <li>Check/uncheck energy source types (biomass, hydro, etc.).</li>
-                        <li>Drag the handles of the power range slider to filter facilities by their power output.</li>
-                        <li>Type in the search input to filter facilities by name, municipality, canton, or energy source. Supports case-insensitive free-form substring match, e.g., 'vs hydro 2021',
-                            and also the keywords 'canton' (e.g., 'canton:be'),'city' (e.g., 'city:zürich'), and 'year' (e.g., 'year:202' matches any facility started in the 2020s).
+                        <li>In facilities mode, drag the handles of the power range slider to filter facilities by their power output.</li>
+                        <li>In facilities mode, use the search input to filter facilities by name, municipality, canton, or energy source. Supports case-insensitive free-form substring match, e.g., 'vs hydro 2021',
+                            and also the keywords 'canton' (e.g., 'canton:be'),'city' (e.g., 'city:zürich'), and 'year' (tip: e.g., 'year:202' matches any facility started in the 2020s).
                         </li>
                     </ul>
-                    Counters update in real time as you change the filters.
+                    <p>Counters update in real time as you change the filters.</p>
                 </li>
-                <li><strong>Map view</strong>
+                <li><strong>Facilities map view</strong>
                     <p>Mouse wheel / pinch to zoom, click+drag / tap+drag to pan, Shift+drag to change rotation and tilt. Hover over any facility for details.</p>
                     <p>The dataset does not contain GPS coordinates for all facilities, so not all facilities are displayed on the map.</p>
                 </li>
-                <li><strong>Table view</strong>
+                <li><strong>Facilities table view</strong>
                     <p>View all facilities, including ones without GPS coordinates.</p>
                     <p>Use the pagination controls to navigate (click on the page number to jump to a specific page).</p>
                     <p>Use the column headers to sort.</p>
                 </li>
+                <li><strong>Production mode</strong>
+                    <p>The chart by default shows the entire time range (2015 to present) broken down by quarters.</p>
+                    <p>Mouse wheel / pinch to zoom, click+drag / tap+drag to pan. Summary statistics in the sources panel update as you move around.
+                        Bars rescale (quarters → months → weeks → days) as you zoom in.</p>
+                    <p>Hover over any bar to see details for the corresponding time period.</p>
+                </li>
             </ul>
 
             <h4>About the data</h4>
-            <p>This dataset contains all operational electricity production facilities registered in the Swiss Certificate of Origin system, including:</p>
+            <p>The facilities dataset contains all operational electricity production facilities registered in the Swiss Certificate of Origin system, including:</p>
             <ul>
                 <li>All facilities with capacity greater than 30 kVA.</li>
                 <li>Smaller facilities (>2 kW) voluntarily registered for certificates.</li>
                 <li>Facilities subsidized via feed-in tariffs, one-time payments, or investment contributions pursuant to the 2021 Swiss Energy Act.</li>
             </ul>
 
-            <p>The data is current as of 2025-05-21.</p>
+            <p>The production data contains aggregate energy production broken down by day and energy source, starting on 2015-01-01.</p>
+            <p><strong>Unfortunately, the production source types are not exactly the same as those in the facilities dataset, and there are no public per-facility production records.</strong></p>
+
+            <p>Facilities data is updated quarterly. Production data is updated weekly (with 1-day granularity).</p>
 
             <h4>Data sources</h4>
-            <p><strong>Swiss Federal Office of Energy (BFE):</strong><br>
+            <p><strong>Swiss Federal Office of Energy (BFE):</strong>
             <a href="https://www.bfe.admin.ch/bfe/de/home/versorgung/digitalisierung-und-geoinformation/geoinformation/geodaten/produktionsanlagen/elektrizitaetsproduktionsanlagen.html" target="_blank">Electricity Production Facilities Documentation</a></p>
 
-            <p><strong>Open Government Data Portal:</strong><br>
-            <a href="https://opendata.swiss/de/dataset/elektrizitatsproduktionsanlagen/resource/3a10b118-2382-4fc1-9571-e61d0294778e" target="_blank">Dataset Download (CSV)</a></p>
+            <p><strong>BFE facilities data (Open Government Data Portal):</strong>
+            <a href="https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_elektrizitaetsproduktionsanlagen.csv" target="_blank">CSV</a></p>
 
-            <p style="margin-top: 20px; font-size: 11px; color: #999;">Data updated regularly by the Swiss Federal Office of Energy. Some facilities lack GPS coordinates and are excluded from the map display.</p>
+            <p><strong>Swissgrid production data (Open Government Data Portal):</strong>
+            <a href="https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv" target="_blank">CSV</a></p>
         </div>
     </div>
 
@@ -1891,7 +1909,7 @@
 
             const currentUnit = chart.options.scales.x.time.unit;
             if (currentUnit === unit) return;
-            console.log(`Zoom: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
+            // console.log(`Zoom: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
             chart.options.scales.x.time.unit = unit;
             updateProductionChart(xScale.min, xScale.max);
         }
