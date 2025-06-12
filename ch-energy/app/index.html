@@ -953,6 +953,7 @@
                     throw new Error(`Failed to load production data: ${productionResponse.status} ${productionResponse.statusText}`);
                 }
                 productionData = await productionResponse.json();
+                productionData.map(d => d.date = new Date(d.date).getTime());
                 selectedProductionCategories = [...productionCategories];
 
                 // Hide loading overlay after successful data load
@@ -1188,18 +1189,19 @@
                 tr.appendChild(avgCell);
                 container.appendChild(tr);
             });
-
-            updateProductionStats();
+            updateProductionStats(0, Infinity);
         }
 
-        function updateProductionStats() {
+        function updateProductionStats(minDate, maxDate) {
             const totals = new Array(6).fill(0);
-            const count = productionData.length;
+            let count = 0;
 
             productionData.forEach(record => {
+                if (record.date < minDate || record.date > maxDate) return;
                 record.prod.forEach((value, index) => {
                     totals[index] += value;
                 });
+                count++;
             });
 
             productionCategories.forEach((category, index) => {
@@ -1765,11 +1767,15 @@
                                 mode: 'x',
                                 onZoomComplete: ({chart}) => {
                                     updateTimeUnit(chart);
+                                    updateProductionStats(chart.options.scales.x.min, chart.options.scales.x.max);
                                 }
                             },
                             pan: {
                                 enabled: true,
-                                mode: 'x'
+                                mode: 'x',
+                                onPanComplete: ({chart}) => {
+                                    updateProductionStats(chart.scales.x.min, chart.scales.x.max);
+                                }
                             },
                             limits: {
                                 x: {
