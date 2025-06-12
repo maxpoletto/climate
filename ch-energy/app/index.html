@@ -1668,6 +1668,7 @@
                 options: {
                     animation: false,
                     normalized: true,
+                    parsing: false,
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: {
@@ -1758,31 +1759,24 @@
 
             productionData.forEach(record => {
                 const date = new Date(record.date);
-                let key;
-
+                date.setHours(0,0,0,0);
                 switch(unit) {
-                    case 'day':
-                        key = date.toISOString().split('T')[0]; // YYYY-MM-DD
-                        break;
                     case 'week':
-                        const weekStart = new Date(date);
-                        weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
-                        key = weekStart.toISOString().split('T')[0];
+                        date.setDate(date.getDate() - date.getDay());
                         break;
                     case 'month':
-                        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        date.setDate(1);
                         break;
                     case 'quarter':
-                        const quarter = Math.floor(date.getMonth() / 3) + 1;
-                        key = `${date.getFullYear()}-Q${quarter}`;
+                        date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
                         break;
                     case 'year':
-                        key = date.getFullYear().toString();
+                        date.setFullYear(date.getFullYear(), 0, 1);
                         break;
                     default:
-                        key = record.date;
+                        break;
                 }
-
+                const key = date.getTime();
                 if (!aggregated[key]) {
                     aggregated[key] = {
                         date: key,
@@ -1790,39 +1784,19 @@
                         count: 0
                     };
                 }
-
-                // Sum the production values
                 record.prod.forEach((value, index) => {
                     aggregated[key].prod[index] += value;
                 });
                 aggregated[key].count += 1;
             });
 
-            // Convert back to array and create proper date objects
+            // Create time-sorted array of aggregated data
             return Object.values(aggregated).map(item => {
-                let dateObj;
-                if (item.date.includes('Q')) {
-                    // Quarter format: YYYY-Q1, YYYY-Q2, etc.
-                    const [year, quarter] = item.date.split('-Q');
-                    const month = (parseInt(quarter) - 1) * 3;
-                    dateObj = new Date(parseInt(year), month, 1);
-                } else if (item.date.length === 4) {
-                    // Year format
-                    dateObj = new Date(parseInt(item.date), 0, 1);
-                } else if (item.date.length === 7) {
-                    // Month format: YYYY-MM
-                    const [year, month] = item.date.split('-');
-                    dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
-                } else {
-                    // Day or week format: YYYY-MM-DD
-                    dateObj = new Date(item.date);
-                }
-
                 return {
-                    date: dateObj.toISOString(),
+                    date: item.date,
                     prod: item.prod
                 };
-            }).sort((a, b) => new Date(a.date) - new Date(b.date));
+            }).sort((a, b) => a.date - b.date);
         }
 
         function updateTimeUnit(chart) {
@@ -1871,7 +1845,7 @@
                 if (categoryIndex === -1) return;
 
                 const data = aggregatedData.map(record => ({
-                    x: new Date(record.date),
+                    x: record.date,
                     y: record.prod[categoryIndex]
                 }));
 
