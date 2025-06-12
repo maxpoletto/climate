@@ -1697,12 +1697,11 @@
                             },
                             pan: {
                                 enabled: true,
-                                mode: 'x'
+                                mode: 'x',
                             },
                             limits: {
                                 x: {
-                                    min: 'original',
-                                    max: 'original'
+                                    minRange: 7*24*60*60*1000,
                                 }
                             }
                         }
@@ -1807,14 +1806,13 @@
             else if (days <= 1095) unit = 'month'; // 3 years
 
             const currentUnit = chart.options.scales.x.time.unit;
-            if (currentUnit !== unit) {
-                console.log(`Zoom detected: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
-                chart.options.scales.x.time.unit = unit;
-                updateProductionChart(xScale.min, xScale.max);
-            }
+            if (currentUnit === unit) return;
+            console.log(`Zoom: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
+            chart.options.scales.x.time.unit = unit;
+            updateProductionChart(xScale.min, xScale.max);
         }
 
-        function updateProductionChart(preserveMinDate, preserveMaxDate) {
+        function updateProductionChart(minDate, maxDate) {
             if (!productionChart) {
                 createProductionChart();
             }
@@ -1822,7 +1820,6 @@
             let currentUnit = productionChart.options.scales.x.time.unit
 
             const aggregatedData = aggregateDataByTimeUnit(currentUnit);
-            console.log(`Aggregated ${productionData.length} days into ${aggregatedData.length} ${currentUnit}s`);
             const datasets = [];
 
             selectedProductionCategories.forEach((category, index) => {
@@ -1844,31 +1841,17 @@
                 });
             });
 
-            console.log('*** aggregatedData', aggregatedData);
-            console.log('*** datasets', datasets);
-
             productionChart.data.datasets = datasets;
             productionChart.options.plugins.title.text = `Energy production (${timeUnitNames[currentUnit]})`;
 
             // Set zoom and pan limits to data range
-            if (aggregatedData.length > 0) {
-                // Always set the overall limits to the full data range
-                const fullMinDate = new Date(aggregatedData[0].date);
-                const fullMaxDate = new Date(aggregatedData[aggregatedData.length - 1].date);
-
-                productionChart.options.plugins.zoom.limits.x.min = fullMinDate;
-                productionChart.options.plugins.zoom.limits.x.max = fullMaxDate;
-
-                // If we have preserved zoom dates, use those; otherwise use full range
-                if (preserveMinDate && preserveMaxDate) {
-                    productionChart.options.scales.x.min = preserveMinDate;
-                    productionChart.options.scales.x.max = preserveMaxDate;
-                } else {
-                    productionChart.options.scales.x.min = fullMinDate;
-                    productionChart.options.scales.x.max = fullMaxDate;
-                }
+            if (minDate && maxDate) {
+                productionChart.options.scales.x.min = minDate;
+                productionChart.options.scales.x.max = maxDate;
+            } else {
+                productionChart.options.scales.x.min = aggregatedData[0].date;
+                productionChart.options.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
             }
-
             productionChart.update();
         }
     </script>
