@@ -1267,7 +1267,7 @@
                         selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
                         // Sync select-all checkbox
                         const allChecked = selectedCategories.length === categories.length;
-                        selectAllCheckbox.checked = allChecked;
+                        allCheckbox.checked = allChecked;
                     }
                     updateTotals();
                     updateTableOrMap();
