@@ -1252,6 +1252,7 @@
                 // Show facilities controls, hide production controls
                 document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
                 document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+                document.getElementById('facilityCount').style.display = 'block';
 
                 // Show appropriate view
                 document.getElementById('productionView').style.display = 'none';
@@ -1274,6 +1275,7 @@
                 // Hide facilities controls, show production controls
                 document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
                 document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+                document.getElementById('facilityCount').style.display = 'none';
 
                 // Show production view
                 document.getElementById('map').style.display = 'none';
@@ -1392,7 +1394,7 @@
             if (!isTableView) {
                 throw new Error('updateTable called in map view');
             }
-            // Use the same filtered facilities as the map (already sorted by underlying array)
+            // Use the same filtered facilities as the map (already sorted in underlying array)
             displayedFacilities = [...filteredFacilities];
 
             // Reset to first page when data changes
@@ -1711,6 +1713,10 @@
                     scales: {
                         x: {
                             type: 'time',
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                            },
                             time: {
                                 unit: 'quarter',
                                 displayFormats: {
