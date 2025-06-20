@@ -1,4 +1,4 @@
-.PHONY: clean deps import serve testfiles
+.PHONY: all clean cleanall deps import serve testfiles setup-cron remove-cron
 
 ROOT_PATH = app
 DATA_PATH = $(ROOT_PATH)/data
@@ -9,6 +9,7 @@ all:
 	@echo "Use 'make dev' to start the development server"
 	@echo "Use 'make prod' to start the production server"
 	@echo "Use 'make import' to import the data"
+	@echo "Use 'make setup-cron' to set up weekly cron job"
 	@echo "Use 'make clean' to clean up"
 
 prod: deps import
@@ -28,6 +29,12 @@ import:
 	mkdir -p $(DATA_PATH)
 	python3 bin/import_data.py --dest_root $(ROOT_PATH)
 
+setup-cron:
+	bin/setup_cron.sh
+
+remove-cron:
+	bin/remove_cron.sh
+
 %.json: %.json.gz
 	@echo "Decompressing $@"
 	gunzip -k $<
@@ -35,3 +42,5 @@ import:
 clean:
 	@echo "Cleaning up..."
 	rm -f $(JSON_FILES)
+
+cleanall: clean remove-cron
