@@ -1,4 +1,5 @@
 data
 app/data
+app/maptiler-key.txt
 .DS_Store
 .vscode/

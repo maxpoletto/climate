@@ -843,7 +843,7 @@
     </div>
 
     <script>
-        const MAPTILER_KEY = 'mWHMTgqp0XM3fDXF5wOy';
+        let MAPTILER_KEY = null;         // Load from file.
         const {Deck, ScatterplotLayer} = deck;
         let deckgl; // DeckGL instance.
 
@@ -909,7 +909,31 @@
             'quarter': 'Quarterly'
         };
 
-        function initialize() {
+        async function loadMapTilerKey() {
+            const response = await fetch('maptiler-key.txt');
+            if (!response.ok) {
+                throw new Error(`Failed to load MapTiler key: ${response.status} ${response.statusText}`);
+            }
+            const key = await response.text();
+            return key.trim();
+        }
+
+        async function initialize() {
+            try {
+                MAPTILER_KEY = await loadMapTilerKey();
+            } catch (error) {
+                console.error('Failed to load MapTiler key:', error);
+                const loadingOverlay = document.getElementById('loadingOverlay');
+                loadingOverlay.innerHTML = `
+                    <div class="loading-content">
+                        <h3>⚠️ MapTiler API Key Missing</h3>
+                        <p><strong>Cannot load map tiles.</strong></p>
+                        <p style="font-size: 12px; color: #666; margin-top: 15px;">Contact maxp@maxp.net for help.</p>
+                    </div>
+                `;
+                return;
+            }
+
             maptilersdk.config.apiKey = MAPTILER_KEY;
             deckgl = new deck.DeckGL({
                 container: 'map',

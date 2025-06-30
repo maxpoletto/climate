@@ -11,6 +11,8 @@ all:
 	@echo "Use 'make import' to import the data"
 	@echo "Use 'make setup-cron' to set up weekly cron job"
 	@echo "Use 'make clean' to clean up"
+	@echo ""
+	@echo "First time setup: write MapTiler API key to app/maptiler-key.txt"
 
 prod: deps import
 	chmod 444 $(GZ_FILES)
