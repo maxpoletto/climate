@@ -1,5 +1,6 @@
 data
 app/data
+app/data/geocode-cache.txt
 app/maptiler-key.txt
 .DS_Store
 .vscode/

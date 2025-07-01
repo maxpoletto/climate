@@ -16,20 +16,25 @@ Output files:
 - $DEST_ROOT/data/production.json.gz (historical production data)
 """
 
-import os
-import json
-import gzip
-import csv
-import requests
-import tempfile
-import shutil
-import zipfile
-from datetime import datetime
-from collections import defaultdict
 import argparse
+import csv
+import gzip
+import json
 import logging
+import os
+import shutil
 import sys
+import tempfile
+import time
+import zipfile
+from collections import defaultdict
+from datetime import datetime
+from typing import List, Dict, Optional, Tuple, Any
+
+
+
 from pyproj import Transformer
+import requests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,6 +76,86 @@ REQUIRED_FIELDS = [
     "lat",
     "lon"
 ]
+
+class Geocoder:
+    def __init__(self, cache_file):
+        self.cache_file = cache_file
+        self.cache = {}
+        self.load()
+        self.num_requests = 0
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Swiss Energy Explorer (https://maxp.net/ch-energy, contact: maxp@maxp.net)'
+        })
+
+    def load(self):
+        """Load the geocoding cache from file."""
+        self.cache = {}
+        if not os.path.exists(self.cache_file):
+            return
+        with open(self.cache_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and '\t' in line:
+                    parts = line.split('\t')
+                    if len(parts) >= 3:
+                        query_hash = parts[0]
+                        lat = float(parts[1]) if parts[1] != 'None' else None
+                        lon = float(parts[2]) if parts[2] != 'None' else None
+                        self.cache[query_hash] = (lat, lon)
+        logger.info("Loaded %d entries from geocoding cache", len(self.cache))
+
+    def save(self):
+        """Save the geocoding cache to file."""
+        with open(self.cache_file, 'w', encoding='utf-8') as f:
+            for query_hash, (lat, lon) in self.cache.items():
+                lat_str = str(lat) if lat is not None else 'None'
+                lon_str = str(lon) if lon is not None else 'None'
+                f.write(f"{query_hash}\t{lat_str}\t{lon_str}\n")
+        logger.info("Saved %d entries to geocoding cache", len(self.cache))
+
+    def geocode(self, address_parts) -> tuple[float, float] | None:
+        """
+        Geocode an address using Nominatim (https://nominatim.org/) with caching.
+        address_parts is a dict with keys 'Address', 'PostCode', 'Municipality'.
+        Returns (lat, lon) tuple or (None, None) if not found.
+        """
+        cache_key ='|'.join([ str(address_parts[f]) for f in ['Address', 'PostCode', 'Municipality']])
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        # Use Nominatim API
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            'street': address_parts['Address'],
+            'postcode': address_parts['PostCode'],
+            'city': address_parts['Municipality'],
+            'format': 'jsonv2',
+            'limit': 1,
+            'countrycodes': 'ch',  # Limit to Switzerland
+            'addressdetails': 0
+        }
+
+        response = self.session.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        self.num_requests += 1
+        time.sleep(1.5) # Rate limiting (https://operations.osmfoundation.org/policies/nominatim/)
+
+        if data and len(data) > 0 and 'lat' in data[0] and 'lon' in data[0]:
+            lat, lon = float(data[0]['lat']), float(data[0]['lon'])
+            logger.debug("Geocoded '%s' -> (%.6f, %.6f)", cache_key, lat, lon)
+        else:
+            lat, lon = None, None
+            logger.debug("No geocoding result for '%s'", cache_key)
+
+        self.cache[cache_key] = (lat, lon)
+
+        if self.num_requests % 100 == 0:
+            logger.info("Geocoded %d addresses", self.num_requests)
+            self.save()
+
+        return lat, lon
 
 def ensure_directories(dest_root):
     """Create necessary directories if they don't exist."""
@@ -157,7 +242,7 @@ def load_catalogue_translations(extract_dir):
             logger.warning("Error reading catalogue file %s: %s", filename, e)
     return translations
 
-def import_facilities(csv_path):
+def import_facilities(csv_path : str, geocoder : Geocoder):
     """Import facilities data from CSV file."""
     logger.info("Importing facilities data...")
 
@@ -169,6 +254,7 @@ def import_facilities(csv_path):
 
     facilities = []
     facilities_with_coords = 0
+    geocoded_facilities = 0
 
     try:
         with open(csv_path, 'r', encoding='utf-8') as f:
@@ -194,12 +280,29 @@ def import_facilities(csv_path):
                             values.append(value)
 
                     if (len(values) >= 2 and
+                        # Check whether data contains coordinates (LV95) already
                         isinstance(values[-2], (int, float)) and isinstance(values[-1], (int, float))):
                         lat, lon = transformer.transform(values[-2], values[-1])
                         values += [lat, lon]
                         facilities_with_coords += 1
                     else:
-                        values += [None, None]
+                        # Try geocoding using address fields
+                        fields = dict(zip(keys[:-2], values)) # Last two keys are lat/lon
+
+                        address_parts = {}
+                        for field in ['Address', 'PostCode', 'Municipality']:
+                            if field in fields and fields[field]:
+                                address_parts[field] = fields[field]
+
+                        if address_parts:
+                            lat, lon = geocoder.geocode(address_parts)
+                            if lat is not None and lon is not None:
+                                geocoded_facilities += 1
+                                facilities_with_coords += 1
+                        else:
+                            lat, lon = None, None
+
+                        values += [lat, lon]
 
                     all_fields = dict(zip(keys, values))
                     facility = {field: all_fields[field] for field in REQUIRED_FIELDS if field in all_fields}
@@ -208,7 +311,11 @@ def import_facilities(csv_path):
                     logger.warning("Error processing facility row %d: %s", i, e)
                     continue
 
-        logger.info("Processed %d facilities, %d with GPS coordinates", len(facilities), facilities_with_coords)
+        # Save the updated geocoding cache
+        geocoder.save()
+
+        logger.info("Processed %d facilities, %d with GPS coordinates (%d from data, %d geocoded)",
+                   len(facilities), facilities_with_coords, facilities_with_coords - geocoded_facilities, geocoded_facilities)
         return facilities
 
     except Exception as e:
@@ -327,6 +434,7 @@ def print_summary(facilities_data, production_data):
 def main():
     parser = argparse.ArgumentParser(description='Import Swiss energy facilities and production data')
     parser.add_argument('--dest_root', default='.', help='Root directory for output files')
+    parser.add_argument('--geocode-cache', default='data/geocode-cache.txt', help='Geocode cache file')
     parser.add_argument('--summary', action='store_true', help='Show data summary after processing')
     parser.add_argument('--facilities-only', action='store_true', help='Only process facilities data')
     parser.add_argument('--production-only', action='store_true', help='Only process production data')
@@ -341,7 +449,7 @@ def main():
         # Import facilities data
         if not args.production_only:
             csv_path = download_facilities()
-            facilities_data = import_facilities(csv_path)
+            facilities_data = import_facilities(csv_path, Geocoder(args.geocode_cache))
 
             if facilities_data:
                 save_compressed_json(
