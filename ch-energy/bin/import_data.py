@@ -97,13 +97,15 @@ class Geocoder:
         with open(self.cache_file, 'r', encoding='utf-8') as f:
             for line in f:
                 line = line.strip()
-                if line and '\t' in line:
-                    parts = line.split('\t')
-                    if len(parts) >= 3:
-                        query_hash = parts[0]
-                        lat = float(parts[1]) if parts[1] != 'None' else None
-                        lon = float(parts[2]) if parts[2] != 'None' else None
-                        self.cache[query_hash] = (lat, lon)
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) != 3:
+                    raise ValueError(f"Invalid cache entry: {line}")
+                query_hash = parts[0]
+                lat = float(parts[1]) if parts[1] != 'None' else None
+                lon = float(parts[2]) if parts[2] != 'None' else None
+                self.cache[query_hash] = (lat, lon)
         logger.info("Loaded %d entries from geocoding cache", len(self.cache))
 
     def save(self):
@@ -120,7 +122,7 @@ class Geocoder:
         address_parts is a dict with keys 'Address', 'PostCode', 'Municipality'.
         Returns (lat, lon) tuple or (None, None) if not found.
         """
-        cache_key ='|'.join([ str(address_parts[f]) for f in ['Address', 'PostCode', 'Municipality']])
+        cache_key ='|'.join([ str(address_parts[f]).strip().replace('\t', ' ').replace('|', ' ') for f in ['Address', 'PostCode', 'Municipality']])
         if cache_key in self.cache:
             return self.cache[cache_key]
 
