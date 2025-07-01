@@ -29,9 +29,6 @@ import time
 import zipfile
 from collections import defaultdict
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple, Any
-
-
 
 from pyproj import Transformer
 import requests
@@ -78,7 +75,11 @@ REQUIRED_FIELDS = [
 ]
 
 class Geocoder:
-    def __init__(self, cache_file):
+    """
+    Geocoder using Nominatim (https://nominatim.org/) with caching.
+    """
+
+    def __init__(self, cache_file : str):
         self.cache_file = cache_file
         self.cache = {}
         self.load()
@@ -114,9 +115,8 @@ class Geocoder:
                 f.write(f"{query_hash}\t{lat_str}\t{lon_str}\n")
         logger.info("Saved %d entries to geocoding cache", len(self.cache))
 
-    def geocode(self, address_parts) -> tuple[float, float] | None:
+    def geocode(self, address_parts : dict[str, str]) -> tuple[float, float] | None:
         """
-        Geocode an address using Nominatim (https://nominatim.org/) with caching.
         address_parts is a dict with keys 'Address', 'PostCode', 'Municipality'.
         Returns (lat, lon) tuple or (None, None) if not found.
         """
@@ -157,7 +157,7 @@ class Geocoder:
 
         return lat, lon
 
-def ensure_directories(dest_root):
+def ensure_directories(dest_root : str):
     """Create necessary directories if they don't exist."""
     os.makedirs(DOWNLOAD_PATH, exist_ok=True)
     os.makedirs(os.path.join(dest_root, "data"), exist_ok=True)
@@ -211,7 +211,7 @@ def download_production():
         logger.error("Download failed: %s", e)
         raise(e)
 
-def load_catalogue_translations(extract_dir):
+def load_catalogue_translations(extract_dir : str) -> dict[str, str]:
     """Load translation dictionaries from 'catalogue' CSV files."""
     logger.info("Loading translation dictionaries from catalogs...")
     translations = {}
@@ -229,25 +229,22 @@ def load_catalogue_translations(extract_dir):
             logger.warning("Catalogue file not found: %s", filepath)
             continue
 
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                csvreader = csv.reader(f)
-                for row in csvreader:
-                    if not row or row[0].startswith('Catalogue'):
-                        continue
-                    code, *translations_list = row
-                    # Use the last (English) translation
-                    translations[code] = translations_list[-1].strip()
-        except Exception as e:
-            logger.warning("Error reading catalogue file %s: %s", filename, e)
+        with open(filepath, 'r', encoding='utf-8') as f:
+            csvreader = csv.reader(f)
+            for row in csvreader:
+                if not row or row[0].startswith('Catalogue'):
+                    continue
+                code, *translations_list = row
+                # Use the last (English) translation
+                translations[code] = translations_list[-1].strip()
     return translations
 
-def import_facilities(csv_path : str, geocoder : Geocoder):
+def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
     """Import facilities data from CSV file."""
-    logger.info("Importing facilities data...")
-
     extract_dir = os.path.dirname(csv_path)
     translations = load_catalogue_translations(extract_dir)
+
+    logger.info("Importing facilities data...")
 
     # Coordinate transformer from Swiss LV95 to WGS84
     transformer = Transformer.from_crs("EPSG:2056", "EPSG:4326")
@@ -256,73 +253,68 @@ def import_facilities(csv_path : str, geocoder : Geocoder):
     facilities_with_coords = 0
     geocoded_facilities = 0
 
-    try:
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            csvreader = csv.reader(f)
-            keys = None
+    with open(csv_path, 'r', encoding='utf-8') as f:
+        csvreader = csv.reader(f)
+        keys = None
 
-            for i, row in enumerate(csvreader):
-                # First row with 'xtf_id' contains the column headers
-                if 'xtf_id' in row[0]:
-                    keys = row + ['lat', 'lon']
-                    continue
-                if keys is None:
-                    raise Exception("No keys found in facilities data")
+        for i, row in enumerate(csvreader):
+            # First row with 'xtf_id' contains the column headers
+            if 'xtf_id' in row[0]:
+                keys = row + ['lat', 'lon']
+                continue
+            if keys is None:
+                raise Exception("No keys found in facilities data")
 
-                try:
-                    values = []
-                    for value in row:
-                        if value in translations:
-                            values.append(translations[value])
-                        elif value.replace('.', '').isdigit():
-                            values.append(float(value) if '.' in value else int(value))
-                        else:
-                            values.append(value)
-
-                    if (len(values) >= 2 and
-                        # Check whether data contains coordinates (LV95) already
-                        isinstance(values[-2], (int, float)) and isinstance(values[-1], (int, float))):
-                        lat, lon = transformer.transform(values[-2], values[-1])
-                        values += [lat, lon]
-                        facilities_with_coords += 1
+            try:
+                values = []
+                for value in row:
+                    if value in translations:
+                        values.append(translations[value])
+                    elif value.replace('.', '').isdigit():
+                        values.append(float(value) if '.' in value else int(value))
                     else:
-                        # Try geocoding using address fields
-                        fields = dict(zip(keys[:-2], values)) # Last two keys are lat/lon
+                        values.append(value)
 
-                        address_parts = {}
-                        for field in ['Address', 'PostCode', 'Municipality']:
-                            if field in fields and fields[field]:
-                                address_parts[field] = fields[field]
+                if (len(values) >= 2 and
+                    # Check whether data contains coordinates (LV95) already
+                    isinstance(values[-2], (int, float)) and isinstance(values[-1], (int, float))):
+                    lat, lon = transformer.transform(values[-2], values[-1])
+                    values += [lat, lon]
+                    facilities_with_coords += 1
+                else:
+                    # Try geocoding using address fields
+                    fields = dict(zip(keys[:-2], values)) # Last two keys are lat/lon
 
-                        if address_parts:
-                            lat, lon = geocoder.geocode(address_parts)
-                            if lat is not None and lon is not None:
-                                geocoded_facilities += 1
-                                facilities_with_coords += 1
-                        else:
-                            lat, lon = None, None
+                    address_parts = {}
+                    for field in ['Address', 'PostCode', 'Municipality']:
+                        if field in fields and fields[field]:
+                            address_parts[field] = fields[field]
 
-                        values += [lat, lon]
+                    if address_parts:
+                        lat, lon = geocoder.geocode(address_parts)
+                        if lat is not None and lon is not None:
+                            geocoded_facilities += 1
+                            facilities_with_coords += 1
+                    else:
+                        lat, lon = None, None
 
-                    all_fields = dict(zip(keys, values))
-                    facility = {field: all_fields[field] for field in REQUIRED_FIELDS if field in all_fields}
-                    facilities.append(facility)
-                except Exception as e:
-                    logger.warning("Error processing facility row %d: %s", i, e)
-                    continue
+                    values += [lat, lon]
 
-        # Save the updated geocoding cache
-        geocoder.save()
+                all_fields = dict(zip(keys, values))
+                facility = {field: all_fields[field] for field in REQUIRED_FIELDS if field in all_fields}
+                facilities.append(facility)
+            except Exception as e:
+                logger.warning("Error processing facility row %d: %s", i, e)
+                continue
 
-        logger.info("Processed %d facilities, %d with GPS coordinates (%d from data, %d geocoded)",
-                   len(facilities), facilities_with_coords, facilities_with_coords - geocoded_facilities, geocoded_facilities)
-        return facilities
+    # Save the updated geocoding cache
+    geocoder.save()
 
-    except Exception as e:
-        logger.error("Error reading facilities CSV: %s", e)
-        raise
+    logger.info("Processed %d facilities, %d with GPS coordinates (%d from data, %d geocoded)",
+                len(facilities), facilities_with_coords, facilities_with_coords - geocoded_facilities, geocoded_facilities)
+    return facilities
 
-def import_production(csv_content):
+def import_production(csv_content : str) -> list[dict]:
     """Import production data from CSV file."""
     logger.info("Importing production data...")
 
@@ -359,7 +351,7 @@ def import_production(csv_content):
     logger.info("Generated data for %s days", len(result))
     return result
 
-def save_compressed_json(data, output_file, description):
+def save_compressed_json(data : list[dict], output_file : str):
     """Save data as compressed JSON using atomic write."""
     json_str = json.dumps(data, separators=(',', ':'))
     output_dir = os.path.dirname(output_file)
@@ -391,7 +383,7 @@ def save_compressed_json(data, output_file, description):
                 pass
         raise e
 
-def print_summary(facilities_data, production_data):
+def print_summary(facilities_data : list[dict], production_data : list[dict]):
     """Print summary statistics."""
     print("\nData Import Summary:")
 
@@ -434,51 +426,44 @@ def print_summary(facilities_data, production_data):
 def main():
     parser = argparse.ArgumentParser(description='Import Swiss energy facilities and production data')
     parser.add_argument('--dest_root', default='.', help='Root directory for output files')
-    parser.add_argument('--geocode-cache', default='data/geocode-cache.txt', help='Geocode cache file')
+    parser.add_argument('--geocode-cache', default='geocode-cache.txt', help='Geocode cache file')
     parser.add_argument('--summary', action='store_true', help='Show data summary after processing')
     parser.add_argument('--facilities-only', action='store_true', help='Only process facilities data')
     parser.add_argument('--production-only', action='store_true', help='Only process production data')
     args = parser.parse_args()
 
-    try:
-        ensure_directories(args.dest_root)
+    ensure_directories(args.dest_root)
 
-        facilities_data = []
-        production_data = []
+    facilities_data = []
+    production_data = []
 
-        # Import facilities data
-        if not args.production_only:
-            csv_path = download_facilities()
-            facilities_data = import_facilities(csv_path, Geocoder(args.geocode_cache))
+    # Import facilities data
+    if not args.production_only:
+        csv_path = download_facilities()
+        facilities_data = import_facilities(csv_path, Geocoder(args.geocode_cache))
 
-            if facilities_data:
-                save_compressed_json(
-                    facilities_data,
-                    os.path.join(args.dest_root, 'data', 'facilities.json.gz'),
-                    'facilities data'
-                )
+        if facilities_data:
+            save_compressed_json(
+                facilities_data,
+                os.path.join(args.dest_root, 'data', 'facilities.json.gz'),
+            )
 
-        # Import production data
-        if not args.facilities_only:
-            csv_content = download_production()
-            production_data = import_production(csv_content)
+    # Import production data
+    if not args.facilities_only:
+        csv_content = download_production()
+        production_data = import_production(csv_content)
 
-            if production_data:
-                save_compressed_json(
-                    production_data,
-                    os.path.join(args.dest_root, 'data', 'production.json.gz'),
-                    'production data'
-                )
+        if production_data:
+            save_compressed_json(
+                production_data,
+                os.path.join(args.dest_root, 'data', 'production.json.gz'),
+            )
 
-        if args.summary:
-            print_summary(facilities_data, production_data)
+    if args.summary:
+        print_summary(facilities_data, production_data)
 
-        logger.info("Import completed successfully")
-        return 0
-
-    except Exception as e:
-        logger.error("Error during import: %s", e)
-        return 1
+    logger.info("Import completed successfully")
+    return 0
 
 if __name__ == "__main__":
     exit(main())

@@ -29,7 +29,7 @@ testfiles: import $(JSON_FILES)
 
 import:
 	mkdir -p $(DATA_PATH)
-	python3 bin/import_data.py --dest_root $(ROOT_PATH)
+	python3 bin/import_data.py --dest_root $(ROOT_PATH) --geocode-cache $(DATA_PATH)/geocode-cache.txt
 
 setup-cron:
 	bin/setup_cron.sh
