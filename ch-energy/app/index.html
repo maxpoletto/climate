@@ -886,7 +886,7 @@
             'Wind energy': [76, 175, 80],          // Green - wind
             'Biomass': [139, 69, 19],              // Brown - organic
             'Natural gas': [255, 87, 34],          // Orange-red - gas
-            'Waste': [158, 158, 158],              // Gray - waste
+            'Waste': [100, 100, 100],              // Gray - waste
             'Nuclear energy': [156, 39, 176],      // Purple - nuclear
             'Crude oil': [96, 125, 139]            // Blue-gray - oil
         };
@@ -1717,10 +1717,11 @@
                 data: mapFacilities,
                 getPosition: d => [d.lon, d.lat],
                 getFillColor: d => CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
-                getRadius: d => Math.max(50, Math.log(d.TotalPower + 1) * 30),
-                opacity: 0.7,
+                getRadius: d => 12*Math.pow(Math.log(d.TotalPower  + 1), 2),
+                radiusUnits: 'meters',
+                opacity: 0.4,
                 pickable: true,
-                radiusMinPixels: 3,
+                radiusMinPixels: 2,
                 radiusMaxPixels: 100,
                 updateTriggers: {
                     getFillColor: selectedCategories,
