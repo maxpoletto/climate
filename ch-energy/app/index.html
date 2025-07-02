@@ -1762,7 +1762,7 @@
             document.getElementById('facilityCount').innerHTML =
                 `${filteredFacilities.length.toLocaleString()} facilities match filters.<br/>Map shows ${mapFacilities.length.toLocaleString()} facilities.` +
                 `<span class="info-asterisk">*` +
-                `<span class="tooltip">${(filteredFacilities.length - mapFacilities.length).toLocaleString()} facilities lack GPS coordinates in source data.</span>` +
+                `<span class="tooltip">${(filteredFacilities.length - mapFacilities.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
                 `</span>`;
         }
 
