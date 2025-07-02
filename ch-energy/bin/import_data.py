@@ -292,7 +292,7 @@ def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
                         if field in fields and fields[field]:
                             address_parts[field] = fields[field]
 
-                    if address_parts:
+                    if address_parts and address_parts['Address'] and address_parts['PostCode'] and address_parts['Municipality']:
                         lat, lon = geocoder.geocode(address_parts)
                         if lat is not None and lon is not None:
                             geocoded_facilities += 1
@@ -369,7 +369,7 @@ def save_compressed_json(data : list[dict], output_file : str):
 
         with gzip.open(temp_path, 'wt', encoding='utf-8') as gz_file:
             gz_file.write(json_str)
-
+        os.chmod(temp_path, 0o644)
         shutil.move(temp_path, output_file)
         temp_path = None  # Successfully moved, don't clean up
 
@@ -379,10 +379,7 @@ def save_compressed_json(data : list[dict], output_file : str):
     except Exception as e:
         logger.error("Error saving data to %s: %s", output_file, e)
         if temp_path and os.path.exists(temp_path):
-            try:
-                os.unlink(temp_path)
-            except Exception:
-                pass
+            os.unlink(temp_path)
         raise e
 
 def print_summary(facilities_data : list[dict], production_data : list[dict]):
