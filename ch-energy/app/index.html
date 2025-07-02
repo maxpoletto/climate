@@ -5,6 +5,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
     <title>Swiss Energy Explorer</title>
     <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <link href="https://unpkg.com/deck.gl@latest/dist/stylesheet.css" rel='stylesheet' />
     <script src="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.umd.min.js"></script>
     <link href="https://cdn.maptiler.com/maptiler-sdk-js/v3.0.1/maptiler-sdk.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" rel="stylesheet">
@@ -948,6 +949,33 @@
                 },
                 controller: true,
                 layers: [],
+                widgets: [
+                    new deck.FullscreenWidget({
+                        id: 'fullscreen-control',
+                        style: {
+                            // Style to center-align with help button.
+                            position: 'fixed',
+                            top: '70px',
+                            left: '19px',
+                            padding: '0px',
+                            margin: '0px',
+                            zIndex: 1000
+                        }
+                    }),
+                    new deck.ZoomWidget({
+                        id: 'zoom-control',
+                        orientation: 'vertical',
+                        style: {
+                            // Style to center-align with help button.
+                            position: 'fixed',
+                            top: '110px',
+                            left: '19px',
+                            padding: '0px',
+                            margin: '0px',
+                            zIndex: 1000
+                        }
+                    })
+                ],
                 getTooltip: ({object}) => {
                     if (!object) return null;
                     return {
