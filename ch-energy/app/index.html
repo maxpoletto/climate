@@ -1897,6 +1897,32 @@
                     },
                 }
             });
+            window.productionChartKeyListener = (e) => {
+                if (!isProductionMode || !productionChart) return;
+                switch (e.key) {
+                    case '-': case '_':
+                        e.preventDefault();
+                        productionChart.zoom(0.8);
+                        productionChart.options.plugins.zoom.zoom.onZoomComplete({chart: productionChart});
+                        break;
+                    case '+': case '=':
+                        e.preventDefault();
+                        productionChart.zoom(1.2);
+                        productionChart.options.plugins.zoom.zoom.onZoomComplete({chart: productionChart});
+                        break;
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        productionChart.pan({ x: 100 });
+                        productionChart.options.plugins.zoom.pan.onPanComplete({chart: productionChart});
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        productionChart.pan({ x: -100 });
+                        productionChart.options.plugins.zoom.pan.onPanComplete({chart: productionChart});
+                        break;
+                }
+            };
+            document.addEventListener('keydown', window.productionChartKeyListener);
         }
 
         function aggregateDataByTimeUnit(unit) {
