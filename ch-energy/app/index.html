@@ -1022,14 +1022,18 @@
 
         async function loadData() {
             try {
-                const facilitiesResponse = await fetch('data/facilities.json');
+                // Add daily timestamp to limit caching time to one day.
+                const t = new Date();
+                const ts = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+
+                const facilitiesResponse = await fetch(`data/facilities.json?v=${ts}`);
                 if (!facilitiesResponse.ok) {
                     throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
                 }
                 facilities = await facilitiesResponse.json();
                 numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
 
-                const productionResponse = await fetch('data/production.json');
+                const productionResponse = await fetch(`data/production.json?v=${ts}`);
                 if (!productionResponse.ok) {
                     throw new Error(`Failed to load production data: ${productionResponse.status} ${productionResponse.statusText}`);
                 }
