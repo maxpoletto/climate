@@ -1,4 +1,4 @@
-.PHONY: all clean cleanall deps import serve testfiles setup-cron remove-cron
+.PHONY: all clean cleanall deps docker-clean import serve testfiles setup-cron remove-cron
 
 ROOT_PATH = app
 DATA_PATH = $(ROOT_PATH)/data
@@ -24,8 +24,9 @@ dev: deps testfiles
 deps:
 	pip install -r requirements.txt
 
-docker-build:
+docker-build: Dockerfile requirements.txt
 	docker build -t ch-energy-importer .
+	@touch docker-build
 
 testfiles: import $(JSON_FILES)
 	@echo "Test files are up to date"
@@ -51,4 +52,9 @@ clean:
 	@echo "Cleaning up..."
 	rm -f $(JSON_FILES)
 
-cleanall: clean remove-cron
+docker-clean:
+	@echo "Cleaning Docker build cache..."
+	rm -f docker-build
+	docker rmi ch-energy-importer 2>/dev/null || true
+
+cleanall: clean docker-clean remove-cron
