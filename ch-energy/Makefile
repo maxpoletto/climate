@@ -22,14 +22,20 @@ dev: deps testfiles
 	cd $(ROOT_PATH) && python3 -m http.server 8000
 
 deps:
-	pip3.12 install -r requirements.txt
+	pip install -r requirements.txt
+
+docker-build:
+	docker build -t ch-energy-importer .
 
 testfiles: import $(JSON_FILES)
 	@echo "Test files are up to date"
 
-import:
+import: docker-build
 	mkdir -p $(DATA_PATH)
-	python3 bin/import_data.py --dest_root $(ROOT_PATH) --geocode-cache $(DATA_PATH)/geocode-cache.txt
+	docker run --rm \
+		-v $(PWD)/$(DATA_PATH):/app/data \
+		ch-energy-importer \
+		--dest_root . --geocode-cache data/geocode-cache.txt
 
 setup-cron:
 	bin/setup_cron.sh
