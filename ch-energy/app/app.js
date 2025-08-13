@@ -1,6 +1,7 @@
 let MAPTILER_KEY = null;         // Load from file.
 const { Deck, ScatterplotLayer } = deck;
 let deckgl;                      // DeckGL instance.
+let lastUpdate = null;           // Last data update date string.
 
 // Global state object
 const appState = {
@@ -139,7 +140,7 @@ function modeFacilities() {
     // Show facilities controls, hide production controls
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.getElementById('facilityCount').style.display = 'block';
+    document.getElementById('annotations').style.display = 'block';
 
     // Show appropriate view
     document.getElementById('productionView').style.display = 'none';
@@ -169,7 +170,13 @@ function modeProduction() {
     // Hide facilities controls, show production controls
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-    document.getElementById('facilityCount').style.display = 'none';
+    if (lastUpdate) {
+        document.getElementById('annotations').style.display = 'block';
+        document.getElementById('annotations').innerHTML =
+            `Last data update: ${lastUpdate}`;
+    } else {
+        document.getElementById('annotations').style.display = 'none';
+    }
 
     // Show production view
     document.getElementById('map').style.display = 'none';
@@ -186,6 +193,7 @@ let filteredFacilities = [];     // Facilities that match the current selection 
 let mapFacilities = [];          // Facilities that match the current selection (category, power range) and have GPS coordinates
 let categories = [];             // All categories (solar, hydro, etc.)
 let searchTimeout = null;        // Debounce timeout for search
+let isInitializing = true;       // Flag to prevent nouiSlider callbacks from being called during initialization
 
 // Table view state
 let displayedFacilities = [];    // Currently displayed facilities in table
@@ -330,6 +338,7 @@ async function initialize() {
     });
 
     initializeUI();
+    isInitializing = false;
 }
 
 function initializeUI() {
@@ -488,19 +497,48 @@ function initializeUI() {
         }
     }
 
+    function _initializeInfoModal() {
+        const infoButton = document.getElementById('infoButton');
+        const infoModal = document.getElementById('infoModal');
+        const closeModal = document.getElementById('closeModal');
+
+        infoButton.addEventListener('click', () => {
+            infoModal.classList.add('show');
+        });
+
+        closeModal.addEventListener('click', () => {
+            infoModal.classList.remove('show');
+        });
+
+        // Close modal when clicking outside
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.classList.remove('show');
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
+                infoModal.classList.remove('show');
+            }
+        });
+    }
+
     _renderPowerSlider();
     _renderFacilityCategories();
     _renderProductionCategories();
     _initializeFacilitySort();
+    _initializeInfoModal();
 
     if (appState.isProductionMode) {
         modeProduction();
     } else {
         modeFacilities();
+        updateTableOrMap();
     }
 
     setupEventListeners();
-    updateTableOrMap();
 }
 
 async function loadData() {
@@ -528,6 +566,15 @@ async function loadData() {
             const [year, month, day] = d.date.split('-').map(Number);
             d.date = new Date(year, month - 1, day); // Parse as local time.
         });
+
+        // Download last update time.
+        const updateResponse = await fetch(`data/last-update.txt?v=${ts}`);
+        if (updateResponse.ok) {
+            lastUpdate = await updateResponse.text();
+            if (! (lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate.trim()))) {
+                lastUpdate = null;
+            }
+        }
 
         // Import state (if any) from URL.
         deserializeStateFromURL();
@@ -687,6 +734,9 @@ function setupEventListeners() {
 
             document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
             updateFacilityCategories();
+            if (isInitializing) {
+                return;
+            }
             updateTableOrMap();
         });
 
@@ -1078,41 +1128,17 @@ function updateMap() {
 
     deckgl.setProps({ layers: [scatterplotLayer] });
 
-    document.getElementById('facilityCount').innerHTML =
+    console.log('lastUpdate', lastUpdate);
+    console.trace();
+    document.getElementById('annotations').innerHTML =
         `${filteredFacilities.length.toLocaleString()} facilities match filters.<br/>Map shows ${mapFacilities.length.toLocaleString()} facilities.` +
         `<span class="info-asterisk">*` +
         `<span class="tooltip">${(filteredFacilities.length - mapFacilities.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
-        `</span>`;
+        `</span>` +
+        (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
 
     serializeStateToURL();
 }
-
-// Info modal functionality
-const infoButton = document.getElementById('infoButton');
-const infoModal = document.getElementById('infoModal');
-const closeModal = document.getElementById('closeModal');
-
-infoButton.addEventListener('click', () => {
-    infoModal.classList.add('show');
-});
-
-closeModal.addEventListener('click', () => {
-    infoModal.classList.remove('show');
-});
-
-// Close modal when clicking outside
-infoModal.addEventListener('click', (e) => {
-    if (e.target === infoModal) {
-        infoModal.classList.remove('show');
-    }
-});
-
-// Close modal with Escape key
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && infoModal.classList.contains('show')) {
-        infoModal.classList.remove('show');
-    }
-});
 
 function createProductionChart() {
     const ctx = document.getElementById('productionChart').getContext('2d');
