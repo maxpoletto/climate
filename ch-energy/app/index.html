@@ -868,13 +868,13 @@
             isTableView: false,
             currentSort: { column: 'TotalPower', direction: 'desc' },
             currentPage: 1,
-            selectedCategories: [],
+            selectedCategories: null,
             minPower: 0.1,
             maxPower: 2000000,
             searchTokens: [],
 
             // Production mode state
-            selectedProductionCategories: [],
+            selectedProductionCategories: null,
 
             // Map view state
             mapView: {
@@ -917,6 +917,7 @@
             const newURL = `${window.location.pathname}?s=${encodedState}`;
             window.history.replaceState({}, '', newURL);
             console.log('encoded state', appState);
+            console.trace();
         }
 
         function deserializeStateFromURL() {
@@ -948,7 +949,10 @@
                 }
                 decodeInt(state.currentPage, (val) => appState.currentPage = val);
                 if (Array.isArray(state.selectedCategories)) {
+                    console.log('selectedCategories', state.selectedCategories);
+                    console.log('categories', categories);
                     appState.selectedCategories = state.selectedCategories.filter(c => typeof c === 'string' && categories.includes(c));
+                    console.log('appState.selectedCategories', appState.selectedCategories);
                 }
                 decodeFloat(state.minPower, (val) => appState.minPower = val, 0);
                 decodeFloat(state.maxPower, (val) => appState.maxPower = val, 0);
@@ -974,7 +978,57 @@
             } catch (error) {
                 console.warn('Failed to deserialize state from URL:', error);
             }
-            console.log('decoded tate', appState);
+            console.log('decoded state', appState);
+        }
+
+        function modeFacilities() {
+            const facilitiesBtn = document.getElementById('facilitiesMode');
+            const productionBtn = document.getElementById('productionMode');
+            facilitiesBtn.classList.add('active');
+            productionBtn.classList.remove('active');
+
+            // Show facilities controls, hide production controls
+            document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
+            document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+            document.getElementById('facilityCount').style.display = 'block';
+
+            // Show appropriate view
+            document.getElementById('productionView').style.display = 'none';
+            if (appState.isTableView) {
+                document.getElementById('tableView').style.display = 'block';
+                document.getElementById('map').style.display = 'none';
+            } else {
+                document.getElementById('tableView').style.display = 'none';
+                document.getElementById('map').style.display = 'block';
+            }
+
+            // Update search box
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = appState.searchTokens.join(' ');
+            }
+
+            updateFacilityCategories();
+        }
+
+        function modeProduction() {
+            const facilitiesBtn = document.getElementById('facilitiesMode');
+            const productionBtn = document.getElementById('productionMode');
+            facilitiesBtn.classList.remove('active');
+            productionBtn.classList.add('active');
+
+            // Hide facilities controls, show production controls
+            document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+            document.getElementById('facilityCount').style.display = 'none';
+
+            // Show production view
+            document.getElementById('map').style.display = 'none';
+            document.getElementById('tableView').style.display = 'none';
+            document.getElementById('productionView').style.display = 'block';
+
+            // Initialize or update the chart
+            updateProductionChart();
         }
 
         let facilities = [];             // All power facilities.
@@ -1056,8 +1110,7 @@
                 `;
                 return;
             }
-
-            deserializeStateFromURL();
+            await loadData();
 
             maptilersdk.config.apiKey = MAPTILER_KEY;
             deckgl = new deck.DeckGL({
@@ -1127,27 +1180,26 @@
                 }
             });
 
-            loadData();
+            initializeUI();
         }
 
         function initializeUI() {
-
             function _renderPowerSlider() {
                 const powerRangeSlider = document.getElementById('powerRangeSlider');
                 noUiSlider.create(powerRangeSlider, {
-                    start: [0, 7.3], // Start at min (0.1 kW) and max (2 GW)
+                    start: [
+                        Math.log10(appState.minPower) + 1,
+                        Math.log10(appState.maxPower) + 1 ],
                     connect: true,
                     range: {
-                        'min': 0,
-                        'max': 7.3
+                        'min': Math.log10(0.1) + 1,
+                        'max': Math.log10(2000000) + 1
                     },
                     step: 0.1
                 });
             }
 
             function _renderFacilityCategories() {
-                categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
-                appState.selectedCategories = [...categories]; // Initialize with all categories selected.
                 const container = document.getElementById('categoryTableBody');
                 container.innerHTML = '';
 
@@ -1156,7 +1208,7 @@
                 allCheckbox.type = 'checkbox';
                 allCheckbox.className = 'category-checkbox';
                 allCheckbox.id = 'cat-select-all';
-                allCheckbox.checked = true;
+                allCheckbox.checked = appState.selectedCategories.length === categories.length;
                 const allLabel = document.createElement('label');
                 allLabel.htmlFor = 'cat-select-all';
                 allLabel.textContent = 'Select/Deselect All';
@@ -1179,7 +1231,7 @@
                     checkbox.className = 'category-checkbox';
                     checkbox.id = `cat-${category.replace(/\s+/g, '-')}`;
                     checkbox.value = category;
-                    checkbox.checked = true;
+                    checkbox.checked = appState.selectedCategories.includes(category);
 
                     const label = document.createElement('label');
                     label.className = 'category-label';
@@ -1224,7 +1276,7 @@
                 allCheckbox.type = 'checkbox';
                 allCheckbox.className = 'category-checkbox';
                 allCheckbox.id = 'prod-cat-select-all';
-                allCheckbox.checked = true;
+                allCheckbox.checked = appState.selectedProductionCategories.length === productionCategories.length;
                 const allLabel = document.createElement('label');
                 allLabel.htmlFor = 'prod-cat-select-all';
                 allLabel.textContent = 'Select/Deselect All';
@@ -1247,7 +1299,7 @@
                     checkbox.className = 'category-checkbox';
                     checkbox.id = `prod-cat-${index}`;
                     checkbox.value = category;
-                    checkbox.checked = true;
+                    checkbox.checked = appState.selectedProductionCategories.includes(category);
 
                     const label = document.createElement('label');
                     label.className = 'category-label';
@@ -1291,7 +1343,13 @@
             _renderFacilityCategories();
             _renderProductionCategories();
             _initializeFacilitySort();
-            updateFacilityCategories();
+
+            if (appState.isProductionMode) {
+                modeProduction();
+            } else {
+                modeFacilities();
+            }
+
             setupEventListeners();
             updateTableOrMap();
         }
@@ -1302,13 +1360,16 @@
                 const t = new Date();
                 const ts = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
 
+                // Download facilities data.
                 const facilitiesResponse = await fetch(`data/facilities.json?v=${ts}`);
                 if (!facilitiesResponse.ok) {
                     throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
                 }
                 facilities = await facilitiesResponse.json();
                 numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
+                categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
 
+                // Download production data.
                 const productionResponse = await fetch(`data/production.json?v=${ts}`);
                 if (!productionResponse.ok) {
                     throw new Error(`Failed to load production data: ${productionResponse.status} ${productionResponse.statusText}`);
@@ -1318,12 +1379,21 @@
                     const [year, month, day] = d.date.split('-').map(Number);
                     d.date = new Date(year, month - 1, day); // Parse as local time.
                 });
-                appState.selectedProductionCategories = [...productionCategories];
+
+                // Import state (if any) from URL.
+                deserializeStateFromURL();
+
+                if (appState.selectedProductionCategories === null) {
+                    // Initialize with all production categories on first load.
+                    appState.selectedProductionCategories = [...productionCategories];
+                }
+                if (appState.selectedCategories === null) {
+                    // Initialize with all categories on first load.
+                    appState.selectedCategories = [...categories];
+                }
 
                 // Hide loading overlay after successful data load
                 document.getElementById('loadingOverlay').style.display = 'none';
-
-                initializeUI();
 
                 console.log(`Loaded ${facilities.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
                 console.log(`Loaded ${productionData.length} days of production data`);
@@ -1559,47 +1629,15 @@
 
                 facilitiesBtn.addEventListener('click', () => {
                     if (!appState.isProductionMode) return;
-
                     appState.isProductionMode = false;
-                    facilitiesBtn.classList.add('active');
-                    productionBtn.classList.remove('active');
-
-                    // Show facilities controls, hide production controls
-                    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
-                    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-                    document.getElementById('facilityCount').style.display = 'block';
-
-                    // Show appropriate view
-                    document.getElementById('productionView').style.display = 'none';
-                    if (appState.isTableView) {
-                        document.getElementById('tableView').style.display = 'block';
-                        document.getElementById('map').style.display = 'none';
-                    } else {
-                        document.getElementById('tableView').style.display = 'none';
-                        document.getElementById('map').style.display = 'block';
-                    }
+                    modeFacilities();
                     serializeStateToURL();
                 });
 
                 productionBtn.addEventListener('click', () => {
                     if (appState.isProductionMode) return;
-
                     appState.isProductionMode = true;
-                    productionBtn.classList.add('active');
-                    facilitiesBtn.classList.remove('active');
-
-                    // Hide facilities controls, show production controls
-                    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-                    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-                    document.getElementById('facilityCount').style.display = 'none';
-
-                    // Show production view
-                    document.getElementById('map').style.display = 'none';
-                    document.getElementById('tableView').style.display = 'none';
-                    document.getElementById('productionView').style.display = 'block';
-
-                    // Initialize or update the chart
-                    updateProductionChart();
+                    modeProduction();
                     serializeStateToURL();
                 });
             }
