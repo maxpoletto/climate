@@ -1,6 +1,7 @@
-data
 app/data
 app/data/geocode-cache.txt
 app/maptiler-key.txt
+data
+docker-build
 .DS_Store
 .vscode/
