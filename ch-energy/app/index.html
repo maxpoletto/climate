@@ -2053,7 +2053,7 @@
             const aggregatedData = aggregateDataByTimeUnit(currentUnit);
             const datasets = [];
 
-            appState.selectedProductionCategories.reverse().forEach((category, index) => {
+            [...appState.selectedProductionCategories].reverse().forEach((category, index) => {
                 const categoryIndex = productionCategories.indexOf(category);
                 if (categoryIndex === -1) return;
 
