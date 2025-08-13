@@ -1039,11 +1039,167 @@
         }
 
         function initializeUI() {
-            initializePowerSlider();
-            setupCategoryCheckboxes();
-            setupProductionControls();
-            setDefaultSort();
-            updateCategoriesAndTotals();
+
+            function _renderPowerSlider() {
+                const powerRangeSlider = document.getElementById('powerRangeSlider');
+                noUiSlider.create(powerRangeSlider, {
+                    start: [0, 7.3], // Start at min (0.1 kW) and max (2 GW)
+                    connect: true,
+                    range: {
+                        'min': 0,
+                        'max': 7.3
+                    },
+                    step: 0.1
+                });
+            }
+
+            function _renderFacilityCategories() {
+                categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
+                appState.selectedCategories = [...categories]; // Initialize with all categories selected.
+                const container = document.getElementById('categoryTableBody');
+                container.innerHTML = '';
+
+                // Select/Deselect all checkbox
+                const allCheckbox = document.createElement('input');
+                allCheckbox.type = 'checkbox';
+                allCheckbox.className = 'category-checkbox';
+                allCheckbox.id = 'cat-select-all';
+                allCheckbox.checked = true;
+                const allLabel = document.createElement('label');
+                allLabel.htmlFor = 'cat-select-all';
+                allLabel.textContent = 'Select/Deselect All';
+                const allTd = document.createElement('td');
+                allTd.colSpan = 3;
+                allTd.appendChild(allCheckbox);
+                allTd.appendChild(allLabel);
+                let tr = document.createElement('tr');
+                tr.appendChild(allTd);
+                container.appendChild(tr);
+
+                categories.forEach(category => {
+                    tr = document.createElement('tr');
+
+                    // Source column with checkbox and color indicator
+                    const sourceCell = document.createElement('td');
+                    sourceCell.className = 'source-cell';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'category-checkbox';
+                    checkbox.id = `cat-${category.replace(/\s+/g, '-')}`;
+                    checkbox.value = category;
+                    checkbox.checked = true;
+
+                    const label = document.createElement('label');
+                    label.className = 'category-label';
+                    label.htmlFor = checkbox.id;
+
+                    const colorIndicator = document.createElement('span');
+                    colorIndicator.className = 'color-indicator';
+                    const color = CATEGORY_COLORS[category] || [128, 128, 128];
+                    colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
+
+                    const text = document.createElement('span');
+                    text.textContent = category;
+
+                    label.appendChild(colorIndicator);
+                    label.appendChild(text);
+                    sourceCell.appendChild(checkbox);
+                    sourceCell.appendChild(label);
+
+                    // Count column
+                    const countCell = document.createElement('td');
+                    countCell.className = 'count-cell';
+                    countCell.id = `count-${category.replace(/\s+/g, '-')}`;
+
+                    // Capacity column (in MW)
+                    const capacityCell = document.createElement('td');
+                    capacityCell.className = 'capacity-cell';
+                    capacityCell.id = `capacity-${category.replace(/\s+/g, '-')}`;
+
+                    tr.appendChild(sourceCell);
+                    tr.appendChild(countCell);
+                    tr.appendChild(capacityCell);
+                    container.appendChild(tr);
+                });
+            }
+
+            function _renderProductionCategories() {
+                const container = document.getElementById('productionCategoryTableBody');
+                container.innerHTML = '';
+
+                // Select/Deselect all checkbox
+                const allCheckbox = document.createElement('input');
+                allCheckbox.type = 'checkbox';
+                allCheckbox.className = 'category-checkbox';
+                allCheckbox.id = 'prod-cat-select-all';
+                allCheckbox.checked = true;
+                const allLabel = document.createElement('label');
+                allLabel.htmlFor = 'prod-cat-select-all';
+                allLabel.textContent = 'Select/Deselect All';
+                const allTd = document.createElement('td');
+                allTd.colSpan = 2;
+                allTd.appendChild(allCheckbox);
+                allTd.appendChild(allLabel);
+                let tr = document.createElement('tr');
+                tr.appendChild(allTd);
+                container.appendChild(tr);
+
+                productionCategories.forEach((category, index) => {
+                    tr = document.createElement('tr');
+
+                    // Source column with checkbox and color indicator
+                    const sourceCell = document.createElement('td');
+                    sourceCell.className = 'source-cell';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'category-checkbox';
+                    checkbox.id = `prod-cat-${index}`;
+                    checkbox.value = category;
+                    checkbox.checked = true;
+
+                    const label = document.createElement('label');
+                    label.className = 'category-label';
+                    label.htmlFor = checkbox.id;
+
+                    const colorIndicator = document.createElement('span');
+                    colorIndicator.className = 'color-indicator';
+                    const color = PRODUCTION_COLORS[category] || [128, 128, 128];
+                    colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
+
+                    const text = document.createElement('span');
+                    text.textContent = category;
+
+                    label.appendChild(colorIndicator);
+                    label.appendChild(text);
+                    sourceCell.appendChild(checkbox);
+                    sourceCell.appendChild(label);
+
+                    // Average daily production column
+                    const avgCell = document.createElement('td');
+                    avgCell.className = 'count-cell';
+                    avgCell.id = `prod-avg-${index}`;
+
+                    tr.appendChild(sourceCell);
+                    tr.appendChild(avgCell);
+                    container.appendChild(tr);
+                });
+                updateProductionStats(0, Infinity);
+            }
+
+            function _initializeFacilitySort() {
+                sortFacilities('Municipality', 'asc');
+                sortFacilities('TotalPower', 'desc');
+                const powerHeader = document.querySelector('th[data-sort="TotalPower"] .sort-indicator');
+                if (powerHeader) {
+                    powerHeader.className = 'sort-indicator desc';
+                }
+            }
+
+            _renderPowerSlider();
+            _renderFacilityCategories();
+            _renderProductionCategories();
+            _initializeFacilitySort();
+            updateFacilityCategories();
             setupEventListeners();
             updateTableOrMap();
         }
@@ -1101,19 +1257,6 @@
             }
         }
 
-        function initializePowerSlider() {
-            const powerRangeSlider = document.getElementById('powerRangeSlider');
-            noUiSlider.create(powerRangeSlider, {
-                start: [0, 7.3], // Start at min (0.1 kW) and max (2 GW)
-                connect: true,
-                range: {
-                    'min': 0,
-                    'max': 7.3
-                },
-                step: 0.1
-            });
-        }
-
         function facilityMatchesSearch(f) {
             if (appState.searchTokens.length === 0) return true;
 
@@ -1159,153 +1302,12 @@
             });
         }
 
-        function setDefaultSort() {
-            sortFacilities('Municipality', 'asc');
-            sortFacilities('TotalPower', 'desc');
-            const powerHeader = document.querySelector('th[data-sort="TotalPower"] .sort-indicator');
-            if (powerHeader) {
-                powerHeader.className = 'sort-indicator desc';
-            }
-        }
-
-        function setupCategoryCheckboxes() {
-            categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
-            appState.selectedCategories = [...categories]; // Initialize with all categories selected.
-            const container = document.getElementById('categoryTableBody');
-            container.innerHTML = '';
-
-            // Select/Deselect all checkbox
-            const allCheckbox = document.createElement('input');
-            allCheckbox.type = 'checkbox';
-            allCheckbox.className = 'category-checkbox';
-            allCheckbox.id = 'cat-select-all';
-            allCheckbox.checked = true;
-            const allLabel = document.createElement('label');
-            allLabel.htmlFor = 'cat-select-all';
-            allLabel.textContent = 'Select/Deselect All';
-            const allTd = document.createElement('td');
-            allTd.colSpan = 3;
-            allTd.appendChild(allCheckbox);
-            allTd.appendChild(allLabel);
-            let tr = document.createElement('tr');
-            tr.appendChild(allTd);
-            container.appendChild(tr);
-
-            categories.forEach(category => {
-                tr = document.createElement('tr');
-
-                // Source column with checkbox and color indicator
-                const sourceCell = document.createElement('td');
-                sourceCell.className = 'source-cell';
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'category-checkbox';
-                checkbox.id = `cat-${category.replace(/\s+/g, '-')}`;
-                checkbox.value = category;
-                checkbox.checked = true;
-
-                const label = document.createElement('label');
-                label.className = 'category-label';
-                label.htmlFor = checkbox.id;
-
-                const colorIndicator = document.createElement('span');
-                colorIndicator.className = 'color-indicator';
-                const color = CATEGORY_COLORS[category] || [128, 128, 128];
-                colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
-
-                const text = document.createElement('span');
-                text.textContent = category;
-
-                label.appendChild(colorIndicator);
-                label.appendChild(text);
-                sourceCell.appendChild(checkbox);
-                sourceCell.appendChild(label);
-
-                // Count column
-                const countCell = document.createElement('td');
-                countCell.className = 'count-cell';
-                countCell.id = `count-${category.replace(/\s+/g, '-')}`;
-
-                // Capacity column (in MW)
-                const capacityCell = document.createElement('td');
-                capacityCell.className = 'capacity-cell';
-                capacityCell.id = `capacity-${category.replace(/\s+/g, '-')}`;
-
-                tr.appendChild(sourceCell);
-                tr.appendChild(countCell);
-                tr.appendChild(capacityCell);
-                container.appendChild(tr);
-            });
-        }
-
         function updateTableOrMap() {
             if (appState.isTableView) {
                 updateTable();
             } else {
                 updateMap();
             }
-        }
-        function setupProductionControls() {
-            const container = document.getElementById('productionCategoryTableBody');
-            container.innerHTML = '';
-
-            // Select/Deselect all checkbox
-            const allCheckbox = document.createElement('input');
-            allCheckbox.type = 'checkbox';
-            allCheckbox.className = 'category-checkbox';
-            allCheckbox.id = 'prod-cat-select-all';
-            allCheckbox.checked = true;
-            const allLabel = document.createElement('label');
-            allLabel.htmlFor = 'prod-cat-select-all';
-            allLabel.textContent = 'Select/Deselect All';
-            const allTd = document.createElement('td');
-            allTd.colSpan = 2;
-            allTd.appendChild(allCheckbox);
-            allTd.appendChild(allLabel);
-            let tr = document.createElement('tr');
-            tr.appendChild(allTd);
-            container.appendChild(tr);
-
-            productionCategories.forEach((category, index) => {
-                tr = document.createElement('tr');
-
-                // Source column with checkbox and color indicator
-                const sourceCell = document.createElement('td');
-                sourceCell.className = 'source-cell';
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'category-checkbox';
-                checkbox.id = `prod-cat-${index}`;
-                checkbox.value = category;
-                checkbox.checked = true;
-
-                const label = document.createElement('label');
-                label.className = 'category-label';
-                label.htmlFor = checkbox.id;
-
-                const colorIndicator = document.createElement('span');
-                colorIndicator.className = 'color-indicator';
-                const color = PRODUCTION_COLORS[category] || [128, 128, 128];
-                colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
-
-                const text = document.createElement('span');
-                text.textContent = category;
-
-                label.appendChild(colorIndicator);
-                label.appendChild(text);
-                sourceCell.appendChild(checkbox);
-                sourceCell.appendChild(label);
-
-                // Average daily production column
-                const avgCell = document.createElement('td');
-                avgCell.className = 'count-cell';
-                avgCell.id = `prod-avg-${index}`;
-
-                tr.appendChild(sourceCell);
-                tr.appendChild(avgCell);
-                container.appendChild(tr);
-            });
-            updateProductionStats(0, Infinity);
         }
 
         function updateProductionStats(minDate, maxDate) {
@@ -1330,223 +1332,224 @@
         }
 
         function setupEventListeners() {
-            setupFacilityCategories();
-            setupFacilityMapControls();
-            setupFacilityViewToggle();
-            setupFacilityTableControls();
-            setupModeToggle();
-            setupProductionCategories();
-            setupProductionControls();
-        }
 
-        function setupFacilityCategories() {
-            const allCheckbox = document.getElementById('cat-select-all');
-            document.getElementById('categoryTableBody').addEventListener('change', function(e) {
-                if (e.target.type === 'checkbox') {
-                    if (e.target.id === 'cat-select-all') {
-                        // Select/deselect all
-                        const checked = e.target.checked;
-                        document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
-                            if (cb.id !== 'cat-select-all') cb.checked = checked;
-                        });
-                        appState.selectedCategories = checked ? [...categories] : [];
-                    } else {
-                        appState.selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
-                        // Sync select-all checkbox
-                        const allChecked = appState.selectedCategories.length === categories.length;
-                        allCheckbox.checked = allChecked;
+            function _facilityCategories() {
+                const allCheckbox = document.getElementById('cat-select-all');
+                document.getElementById('categoryTableBody').addEventListener('change', function(e) {
+                    if (e.target.type === 'checkbox') {
+                        if (e.target.id === 'cat-select-all') {
+                            // Select/deselect all
+                            const checked = e.target.checked;
+                            document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
+                                if (cb.id !== 'cat-select-all') cb.checked = checked;
+                            });
+                            appState.selectedCategories = checked ? [...categories] : [];
+                        } else {
+                            appState.selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
+                            // Sync select-all checkbox
+                            const allChecked = appState.selectedCategories.length === categories.length;
+                            allCheckbox.checked = allChecked;
+                        }
+                        updateTotals();
+                        updateTableOrMap();
                     }
-                    updateTotals();
-                    updateTableOrMap();
-                }
-            });
-        }
-
-        function setupFacilityMapControls() {
-            const powerRangeSlider = document.getElementById('powerRangeSlider');
-            powerRangeSlider.noUiSlider.on('update', function(values, handle) {
-                appState.minPower = Math.pow(10, values[0] - 1);
-                appState.maxPower = Math.pow(10, values[1] - 1);
-
-                function formatPower(power) {
-                    if (power >= 1000000) {
-                        return `${(power / 1000000).toFixed(1)} GW`;
-                    } else if (power >= 1000) {
-                        return `${(power / 1000).toFixed(1)} MW`;
-                    } else {
-                        return `${power.toFixed(1)} kW`;
-                    }
-                }
-
-                const minDisplay = formatPower(appState.minPower);
-                const maxDisplay = formatPower(appState.maxPower);
-
-                document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
-                updateCategoriesAndTotals();
-                updateTableOrMap();
-            });
-
-            const searchInput = document.getElementById('searchInput');
-            searchInput.addEventListener('input', (e) => {
-                const searchText = e.target.value;
-
-                // Use a timeout to debounce search (reduce expensive filter computations).
-                if (searchTimeout) {
-                    clearTimeout(searchTimeout);
-                }
-                searchTimeout = setTimeout(() => {
-                    appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
-                    updateCategoriesAndTotals();
-                    updateTableOrMap();
-                }, 300); // 300ms delay
-            });
-        }
-
-        function setupFacilityViewToggle() {
-            const viewToggle = document.getElementById('viewToggle');
-            viewToggle.addEventListener('click', () => {
-                if (appState.isProductionMode) return; // No effect in production mode
-
-                appState.isTableView = !appState.isTableView;
-                const mapContainer = document.getElementById('map');
-                const tableContainer = document.getElementById('tableView');
-                const toggleButton = document.getElementById('viewToggle');
-
-                if (appState.isTableView) {
-                    mapContainer.style.display = 'none';
-                    tableContainer.style.display = 'block';
-                    toggleButton.textContent = '🗺️ Map View';
-                    updateTable();
-                } else {
-                    mapContainer.style.display = 'block';
-                    tableContainer.style.display = 'none';
-                    toggleButton.textContent = '📊 Table View';
-                    updateMap();
-                }
-            });
-        }
-
-        function setupFacilityTableControls() {
-            const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
-            tableHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const column = header.dataset.sort;
-                    sortTable(column);
                 });
-            });
+            }
 
-            document.getElementById('firstPage').addEventListener('click', () => {
-                if (appState.currentPage > 1) {
-                    appState.currentPage = 1;
-                    renderTable();
-                }
-            });
+            function _facilityMapControls() {
+                const powerRangeSlider = document.getElementById('powerRangeSlider');
+                powerRangeSlider.noUiSlider.on('update', function(values, handle) {
+                    appState.minPower = Math.pow(10, values[0] - 1);
+                    appState.maxPower = Math.pow(10, values[1] - 1);
 
-            document.getElementById('prevPage').addEventListener('click', () => {
-                if (appState.currentPage > 1) {
-                    appState.currentPage--;
-                    renderTable();
-                }
-            });
-
-            document.getElementById('nextPage').addEventListener('click', () => {
-                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
-                if (appState.currentPage < totalPages) {
-                    appState.currentPage++;
-                    renderTable();
-                }
-            });
-
-            document.getElementById('lastPage').addEventListener('click', () => {
-                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
-                if (appState.currentPage < totalPages) {
-                    appState.currentPage = totalPages;
-                    renderTable();
-                }
-            });
-
-            // Page number click => inline input
-            document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
-        }
-
-        function setupModeToggle() {
-            const facilitiesBtn = document.getElementById('facilitiesMode');
-            const productionBtn = document.getElementById('productionMode');
-
-            facilitiesBtn.addEventListener('click', () => {
-                if (!appState.isProductionMode) return;
-
-                appState.isProductionMode = false;
-                facilitiesBtn.classList.add('active');
-                productionBtn.classList.remove('active');
-
-                // Show facilities controls, hide production controls
-                document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
-                document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-                document.getElementById('facilityCount').style.display = 'block';
-
-                // Show appropriate view
-                document.getElementById('productionView').style.display = 'none';
-                if (appState.isTableView) {
-                    document.getElementById('tableView').style.display = 'block';
-                    document.getElementById('map').style.display = 'none';
-                } else {
-                    document.getElementById('tableView').style.display = 'none';
-                    document.getElementById('map').style.display = 'block';
-                }
-            });
-
-            productionBtn.addEventListener('click', () => {
-                if (appState.isProductionMode) return;
-
-                appState.isProductionMode = true;
-                productionBtn.classList.add('active');
-                facilitiesBtn.classList.remove('active');
-
-                // Hide facilities controls, show production controls
-                document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-                document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-                document.getElementById('facilityCount').style.display = 'none';
-
-                // Show production view
-                document.getElementById('map').style.display = 'none';
-                document.getElementById('tableView').style.display = 'none';
-                document.getElementById('productionView').style.display = 'block';
-
-                // Initialize or update the chart
-                updateProductionChart();
-            });
-        }
-
-        function setupProductionCategories() {
-            const allCheckbox = document.getElementById('prod-cat-select-all');
-            document.getElementById('productionCategoryTableBody').addEventListener('change', function(e) {
-                if (e.target.type === 'checkbox') {
-                    if (e.target.id === 'prod-cat-select-all') {
-                        // Select/deselect all
-                        const checked = e.target.checked;
-                        document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
-                            if (cb.id !== 'prod-cat-select-all') cb.checked = checked;
-                        });
-                        appState.selectedProductionCategories = checked ? [...productionCategories] : [];
-                    } else {
-                        appState.selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
-                        // Sync select-all checkbox
-                        const allChecked = appState.selectedProductionCategories.length === productionCategories.length;
-                        allCheckbox.checked = allChecked;
+                    function formatPower(power) {
+                        if (power >= 1000000) {
+                            return `${(power / 1000000).toFixed(1)} GW`;
+                        } else if (power >= 1000) {
+                            return `${(power / 1000).toFixed(1)} MW`;
+                        } else {
+                            return `${power.toFixed(1)} kW`;
+                        }
                     }
-                    updateProductionChart();
-                }
-            });
-        }
 
-        function setupProductionControls() {
-            const resetZoomBtn = document.getElementById('resetZoom');
-            resetZoomBtn.addEventListener('click', () => {
-                if (productionChart) {
-                    productionChart.resetZoom();
-                }
-            });
+                    const minDisplay = formatPower(appState.minPower);
+                    const maxDisplay = formatPower(appState.maxPower);
+
+                    document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
+                    updateFacilityCategories();
+                    updateTableOrMap();
+                });
+
+                const searchInput = document.getElementById('searchInput');
+                searchInput.addEventListener('input', (e) => {
+                    const searchText = e.target.value;
+
+                    // Use a timeout to debounce search (reduce expensive filter computations).
+                    if (searchTimeout) {
+                        clearTimeout(searchTimeout);
+                    }
+                    searchTimeout = setTimeout(() => {
+                        appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+                        updateFacilityCategories();
+                        updateTableOrMap();
+                    }, 300); // 300ms delay
+                });
+            }
+
+            function _facilityViewToggle() {
+                const viewToggle = document.getElementById('viewToggle');
+                viewToggle.addEventListener('click', () => {
+                    if (appState.isProductionMode) return; // No effect in production mode
+
+                    appState.isTableView = !appState.isTableView;
+                    const mapContainer = document.getElementById('map');
+                    const tableContainer = document.getElementById('tableView');
+                    const toggleButton = document.getElementById('viewToggle');
+
+                    if (appState.isTableView) {
+                        mapContainer.style.display = 'none';
+                        tableContainer.style.display = 'block';
+                        toggleButton.textContent = '🗺️ Map View';
+                        updateTable();
+                    } else {
+                        mapContainer.style.display = 'block';
+                        tableContainer.style.display = 'none';
+                        toggleButton.textContent = '📊 Table View';
+                        updateMap();
+                    }
+                });
+            }
+
+            function _facilityTableControls() {
+                const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
+                tableHeaders.forEach(header => {
+                    header.addEventListener('click', () => {
+                        const column = header.dataset.sort;
+                        sortTable(column);
+                    });
+                });
+
+                document.getElementById('firstPage').addEventListener('click', () => {
+                    if (appState.currentPage > 1) {
+                        appState.currentPage = 1;
+                        renderTable();
+                    }
+                });
+
+                document.getElementById('prevPage').addEventListener('click', () => {
+                    if (appState.currentPage > 1) {
+                        appState.currentPage--;
+                        renderTable();
+                    }
+                });
+
+                document.getElementById('nextPage').addEventListener('click', () => {
+                    const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+                    if (appState.currentPage < totalPages) {
+                        appState.currentPage++;
+                        renderTable();
+                    }
+                });
+
+                document.getElementById('lastPage').addEventListener('click', () => {
+                    const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+                    if (appState.currentPage < totalPages) {
+                        appState.currentPage = totalPages;
+                        renderTable();
+                    }
+                });
+
+                // Page number click => inline input
+                document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
+            }
+
+            function _modeToggle() {
+                const facilitiesBtn = document.getElementById('facilitiesMode');
+                const productionBtn = document.getElementById('productionMode');
+
+                facilitiesBtn.addEventListener('click', () => {
+                    if (!appState.isProductionMode) return;
+
+                    appState.isProductionMode = false;
+                    facilitiesBtn.classList.add('active');
+                    productionBtn.classList.remove('active');
+
+                    // Show facilities controls, hide production controls
+                    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
+                    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+                    document.getElementById('facilityCount').style.display = 'block';
+
+                    // Show appropriate view
+                    document.getElementById('productionView').style.display = 'none';
+                    if (appState.isTableView) {
+                        document.getElementById('tableView').style.display = 'block';
+                        document.getElementById('map').style.display = 'none';
+                    } else {
+                        document.getElementById('tableView').style.display = 'none';
+                        document.getElementById('map').style.display = 'block';
+                    }
+                });
+
+                productionBtn.addEventListener('click', () => {
+                    if (appState.isProductionMode) return;
+
+                    appState.isProductionMode = true;
+                    productionBtn.classList.add('active');
+                    facilitiesBtn.classList.remove('active');
+
+                    // Hide facilities controls, show production controls
+                    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+                    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+                    document.getElementById('facilityCount').style.display = 'none';
+
+                    // Show production view
+                    document.getElementById('map').style.display = 'none';
+                    document.getElementById('tableView').style.display = 'none';
+                    document.getElementById('productionView').style.display = 'block';
+
+                    // Initialize or update the chart
+                    updateProductionChart();
+                });
+            }
+
+            function _productionCategories() {
+                const allCheckbox = document.getElementById('prod-cat-select-all');
+                document.getElementById('productionCategoryTableBody').addEventListener('change', function(e) {
+                    if (e.target.type === 'checkbox') {
+                        if (e.target.id === 'prod-cat-select-all') {
+                            // Select/deselect all
+                            const checked = e.target.checked;
+                            document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
+                                if (cb.id !== 'prod-cat-select-all') cb.checked = checked;
+                            });
+                            appState.selectedProductionCategories = checked ? [...productionCategories] : [];
+                        } else {
+                            appState.selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
+                            // Sync select-all checkbox
+                            const allChecked = appState.selectedProductionCategories.length === productionCategories.length;
+                            allCheckbox.checked = allChecked;
+                        }
+                        updateProductionChart();
+                    }
+                });
+            }
+
+            function _productionControls() {
+                const resetZoomBtn = document.getElementById('resetZoom');
+                resetZoomBtn.addEventListener('click', () => {
+                    if (productionChart) {
+                        productionChart.resetZoom();
+                    }
+                });
+            }
+
+            _facilityCategories();
+            _facilityMapControls();
+            _facilityViewToggle();
+            _facilityTableControls();
+            _modeToggle();
+            _productionCategories();
+            _productionControls();
         }
 
         function sortTable(column) {
@@ -1564,7 +1567,7 @@
             sortFacilities(column, direction);
 
             // Re-filter and update display with the newly sorted data
-            updateCategoriesAndTotals();
+            updateFacilityCategories();
             updateTableOrMap();
 
             // Reset to first page after sorting
@@ -1722,7 +1725,7 @@
             document.getElementById('lastPage').disabled = appState.currentPage >= totalPages;
         }
 
-        function updateCategoriesAndTotals() {
+        function updateFacilityCategories() {
             const categoryStats = {};
             categories.forEach(category => {
                 categoryStats[category] = { count: 0, capacity: 0 };
@@ -1944,7 +1947,7 @@
                 }
             });
             window.productionChartKeyListener = (e) => {
-                if (!isProductionMode || !productionChart) return;
+                if (!appState.isProductionMode || !productionChart) return;
                 switch (e.key) {
                     case '-': case '_':
                         e.preventDefault();
