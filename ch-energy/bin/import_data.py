@@ -461,6 +461,13 @@ def main():
     if args.summary:
         print_summary(facilities_data, production_data)
 
+    # Write last update timestamp
+    last_update_file = os.path.join(args.dest_root, 'data', 'last-update.txt')
+    os.makedirs(os.path.dirname(last_update_file), exist_ok=True)
+    with open(last_update_file, 'w') as f:
+        f.write(datetime.now().strftime('%Y-%m-%d'))
+    logger.info("Wrote last update timestamp to %s", last_update_file)
+
     logger.info("Import completed successfully")
     return 0
 
