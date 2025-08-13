@@ -890,6 +890,93 @@
             }
         };
 
+        // State deserialization functions
+        function decodeInt(value, setter, min = 1) {
+            if (value !== undefined) {
+                const num = parseInt(value);
+                if (!isNaN(num) && num >= min) {
+                    setter(num);
+                }
+            }
+        }
+
+        function decodeFloat(value, setter, min = null, max = null) {
+            if (value !== undefined) {
+                const num = parseFloat(value);
+                if (!isNaN(num) && (min === null || num >= min) && (max === null || num <= max)) {
+                    setter(num);
+                }
+            }
+        }
+
+        function serializeStateToURL() {
+            // Serialize the full appState to JSON and encode as base64
+            const encodedState = btoa(JSON.stringify(appState));
+
+            // Update URL without triggering a page reload
+            const newURL = `${window.location.pathname}?s=${encodedState}`;
+            window.history.replaceState({}, '', newURL);
+            console.log('encoded state', appState);
+        }
+
+        function deserializeStateFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const encodedState = params.get('s');
+
+            if (!encodedState) return;
+
+            try {
+                // Decode base64 and parse JSON
+                const state = JSON.parse(atob(encodedState));
+
+                // Validate and apply the deserialized state to appState
+                if (state.isProductionMode !== undefined) {
+                    appState.isProductionMode = Boolean(state.isProductionMode);
+                }
+                if (state.isTableView !== undefined) {
+                    appState.isTableView = Boolean(state.isTableView);
+                }
+                if (state.currentSort && typeof state.currentSort === 'object') {
+                    if (state.currentSort.column && state.currentSort.direction
+                        && tableColumns.includes(state.currentSort.column)
+                        && (state.currentSort.direction === 'asc' || state.currentSort.direction === 'desc')) {
+                        appState.currentSort = {
+                            column: String(state.currentSort.column),
+                            direction: String(state.currentSort.direction)
+                        };
+                    }
+                }
+                decodeInt(state.currentPage, (val) => appState.currentPage = val);
+                if (Array.isArray(state.selectedCategories)) {
+                    appState.selectedCategories = state.selectedCategories.filter(c => typeof c === 'string' && categories.includes(c));
+                }
+                decodeFloat(state.minPower, (val) => appState.minPower = val, 0);
+                decodeFloat(state.maxPower, (val) => appState.maxPower = val, 0);
+                if (Array.isArray(state.searchTokens)) {
+                    appState.searchTokens = state.searchTokens.filter(t => typeof t === 'string');
+                }
+                if (Array.isArray(state.selectedProductionCategories)) {
+                    appState.selectedProductionCategories = state.selectedProductionCategories.filter(c => typeof c === 'string');
+                }
+                if (state.mapView && typeof state.mapView === 'object') {
+                    decodeFloat(state.mapView.latitude, (val) => appState.mapView.latitude = val, -90, 90);
+                    decodeFloat(state.mapView.longitude, (val) => appState.mapView.longitude = val, -180, 180);
+                    decodeFloat(state.mapView.zoom, (val) => appState.mapView.zoom = val, 0);
+                }
+                if (state.productionChart && typeof state.productionChart === 'object') {
+                    if (state.productionChart.xmin !== undefined && state.productionChart.xmin !== null) {
+                        decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val);
+                    }
+                    if (state.productionChart.xmax !== undefined && state.productionChart.xmax !== null) {
+                        decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val);
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to deserialize state from URL:', error);
+            }
+            console.log('decoded tate', appState);
+        }
+
         let facilities = [];             // All power facilities.
         let numFacilitiesWithCoords = 0; // Number of facilities with GPS coordinates
         let filteredFacilities = [];     // Facilities that match the current selection (category, power range)
@@ -943,6 +1030,8 @@
             'quarter': 'Quarterly'
         };
 
+        const tableColumns = [ "SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps" ];
+
         async function loadMapTilerKey() {
             const response = await fetch('maptiler-key.txt');
             if (!response.ok) {
@@ -968,6 +1057,8 @@
                 return;
             }
 
+            deserializeStateFromURL();
+
             maptilersdk.config.apiKey = MAPTILER_KEY;
             deckgl = new deck.DeckGL({
                 container: 'map',
@@ -987,6 +1078,7 @@
                     appState.mapView.latitude = viewState.latitude;
                     appState.mapView.longitude = viewState.longitude;
                     appState.mapView.zoom = viewState.zoom;
+                    serializeStateToURL();
                 },
                 widgets: [
                     new deck.FullscreenWidget({
@@ -1304,7 +1396,7 @@
 
         function updateTableOrMap() {
             if (appState.isTableView) {
-                updateTable();
+                updateTable(true);
             } else {
                 updateMap();
             }
@@ -1329,6 +1421,16 @@
                     avgElement.textContent = avg.toFixed(1);
                 }
             });
+        }
+
+        function formatPower(power) {
+            if (power >= 1000000) {
+                return `${(power / 1000000).toFixed(1)} GW`;
+            } else if (power >= 1000) {
+                return `${(power / 1000).toFixed(1)} MW`;
+            } else {
+                return `${power.toFixed(1)} kW`;
+            }
         }
 
         function setupEventListeners() {
@@ -1361,17 +1463,6 @@
                 powerRangeSlider.noUiSlider.on('update', function(values, handle) {
                     appState.minPower = Math.pow(10, values[0] - 1);
                     appState.maxPower = Math.pow(10, values[1] - 1);
-
-                    function formatPower(power) {
-                        if (power >= 1000000) {
-                            return `${(power / 1000000).toFixed(1)} GW`;
-                        } else if (power >= 1000) {
-                            return `${(power / 1000).toFixed(1)} MW`;
-                        } else {
-                            return `${power.toFixed(1)} kW`;
-                        }
-                    }
-
                     const minDisplay = formatPower(appState.minPower);
                     const maxDisplay = formatPower(appState.maxPower);
 
@@ -1410,13 +1501,12 @@
                         mapContainer.style.display = 'none';
                         tableContainer.style.display = 'block';
                         toggleButton.textContent = '🗺️ Map View';
-                        updateTable();
                     } else {
                         mapContainer.style.display = 'block';
                         tableContainer.style.display = 'none';
                         toggleButton.textContent = '📊 Table View';
-                        updateMap();
                     }
+                    updateTableOrMap();
                 });
             }
 
@@ -1432,14 +1522,14 @@
                 document.getElementById('firstPage').addEventListener('click', () => {
                     if (appState.currentPage > 1) {
                         appState.currentPage = 1;
-                        renderTable();
+                        updateTable();
                     }
                 });
 
                 document.getElementById('prevPage').addEventListener('click', () => {
                     if (appState.currentPage > 1) {
                         appState.currentPage--;
-                        renderTable();
+                        updateTable();
                     }
                 });
 
@@ -1447,7 +1537,7 @@
                     const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
                     if (appState.currentPage < totalPages) {
                         appState.currentPage++;
-                        renderTable();
+                        updateTable();
                     }
                 });
 
@@ -1455,7 +1545,7 @@
                     const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
                     if (appState.currentPage < totalPages) {
                         appState.currentPage = totalPages;
-                        renderTable();
+                        updateTable();
                     }
                 });
 
@@ -1488,6 +1578,7 @@
                         document.getElementById('tableView').style.display = 'none';
                         document.getElementById('map').style.display = 'block';
                     }
+                    serializeStateToURL();
                 });
 
                 productionBtn.addEventListener('click', () => {
@@ -1509,6 +1600,7 @@
 
                     // Initialize or update the chart
                     updateProductionChart();
+                    serializeStateToURL();
                 });
             }
 
@@ -1530,6 +1622,7 @@
                             allCheckbox.checked = allChecked;
                         }
                         updateProductionChart();
+                        serializeStateToURL();
                     }
                 });
             }
@@ -1569,25 +1662,19 @@
             // Re-filter and update display with the newly sorted data
             updateFacilityCategories();
             updateTableOrMap();
-
-            // Reset to first page after sorting
-            appState.currentPage = 1;
-            updateTableOrMap();
         }
 
-        function updateTable() {
+        function updateTable(reset = false) {
             if (!appState.isTableView) {
                 throw new Error('updateTable called in map view');
             }
-            // Use the same filtered facilities as the map (already sorted in underlying array)
-            displayedFacilities = [...filteredFacilities];
+            if (reset) {
+                // Use the same filtered facilities as the map (already sorted in underlying array)
+                displayedFacilities = [...filteredFacilities];
+                // Reset to first page when data changes
+                appState.currentPage = 1;
+            }
 
-            // Reset to first page when data changes
-            appState.currentPage = 1;
-            renderTable();
-        }
-
-        function renderTable() {
             const tbody = document.getElementById('facilitiesTableBody');
             tbody.innerHTML = '';
 
@@ -1647,6 +1734,7 @@
                 tbody.appendChild(row);
             });
             updatePaginationControls();
+            serializeStateToURL();
         }
 
         function createPageNumberSpan() {
@@ -1694,7 +1782,7 @@
                 const newSpan = createPageNumberSpan();
                 input.parentNode.replaceChild(newSpan, input);
                 if (pageNumber >= 1 && pageNumber <= totalPages) {
-                    renderTable();
+                    updateTable();
                 }
             };
 
@@ -1808,6 +1896,8 @@
                 `<span class="info-asterisk">*` +
                 `<span class="tooltip">${(filteredFacilities.length - mapFacilities.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
                 `</span>`;
+
+            serializeStateToURL();
         }
 
         // Info modal functionality
@@ -1885,6 +1975,7 @@
                                 updateProductionStats(chart.options.scales.x.min, chart.options.scales.x.max);
                                 appState.productionChart.xmin = chart.options.scales.x.min;
                                 appState.productionChart.xmax = chart.options.scales.x.max;
+                                serializeStateToURL();
                             }
                         },
                         pan: {
@@ -1894,6 +1985,7 @@
                                 updateProductionStats(chart.scales.x.min, chart.scales.x.max);
                                 appState.productionChart.xmin = chart.scales.x.min;
                                 appState.productionChart.xmax = chart.scales.x.max;
+                                serializeStateToURL();
                             }
                         },
                             limits: {
