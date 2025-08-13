@@ -857,31 +857,53 @@
     <script>
         let MAPTILER_KEY = null;         // Load from file.
         const {Deck, ScatterplotLayer} = deck;
-        let deckgl; // DeckGL instance.
+        let deckgl;                      // DeckGL instance.
+
+        // Global state object
+        const appState = {
+            // Top-level toggle, facilities vs production mode
+            isProductionMode: false,
+
+            // Facilities mode state
+            isTableView: false,
+            currentSort: { column: 'TotalPower', direction: 'desc' },
+            currentPage: 1,
+            selectedCategories: [],
+            minPower: 0.1,
+            maxPower: 2000000,
+            searchTokens: [],
+
+            // Production mode state
+            selectedProductionCategories: [],
+
+            // Map view state
+            mapView: {
+                latitude: 46.8182,
+                longitude: 8.2275,
+                zoom: 8
+            },
+
+            // Production chart state
+            productionChart: {
+                leftBound: null,
+                rightBound: null
+            }
+        };
 
         let facilities = [];             // All power facilities.
         let numFacilitiesWithCoords = 0; // Number of facilities with GPS coordinates
         let filteredFacilities = [];     // Facilities that match the current selection (category, power range)
         let mapFacilities = [];          // Facilities that match the current selection (category, power range) and have GPS coordinates
         let categories = [];             // All categories (solar, hydro, etc.)
-        let selectedCategories = [];     // Categories that are currently selected
-        let minPower = 0.1;              // Minimum power output (in kW)
-        let maxPower = 2000000;          // Maximum power output (in kW)
-        let searchTokens = [];           // Current search tokens
         let searchTimeout = null;        // Debounce timeout for search
 
         // Table view state
-        let isTableView = false;
-        let currentSort = { column: 'TotalPower', direction: 'desc' };
         let displayedFacilities = [];    // Currently displayed facilities in table
-        let currentPage = 1;
-        let facilitiesPerPage = 50;      // Show 50 facilities per page
+        const facilitiesPerPage = 50;    // Show 50 facilities per page
 
         // Production data state
         let productionData = [];         // Historical production data
-        let isProductionMode = false;    // Whether we're in production mode vs facilities mode
         let productionChart = null;      // Chart.js instance
-        let selectedProductionCategories = []; // Selected production categories
         let productionCategories = [     // Production categories (from prod.json.gz)
             'Hydro (pumped)',
             'Hydro (river)',
@@ -952,14 +974,20 @@
                 map: maptilersdk,
                 mapStyle: maptilersdk.MapStyle.BASIC,
                 initialViewState: {
-                    longitude: 8.2275,
-                    latitude: 46.8182,
-                    zoom: 8,
+                    longitude: appState.mapView.longitude,
+                    latitude: appState.mapView.latitude,
+                    zoom: appState.mapView.zoom,
                     pitch: 0,
                     bearing: 0
                 },
                 controller: true,
                 layers: [],
+                onViewStateChange: ({viewState}) => {
+                    // Update map view state when map is moved
+                    appState.mapView.latitude = viewState.latitude;
+                    appState.mapView.longitude = viewState.longitude;
+                    appState.mapView.zoom = viewState.zoom;
+                },
                 widgets: [
                     new deck.FullscreenWidget({
                         id: 'fullscreen-control',
@@ -1042,7 +1070,7 @@
                     const [year, month, day] = d.date.split('-').map(Number);
                     d.date = new Date(year, month - 1, day); // Parse as local time.
                 });
-                selectedProductionCategories = [...productionCategories];
+                appState.selectedProductionCategories = [...productionCategories];
 
                 // Hide loading overlay after successful data load
                 document.getElementById('loadingOverlay').style.display = 'none';
@@ -1087,7 +1115,7 @@
         }
 
         function facilityMatchesSearch(f) {
-            if (searchTokens.length === 0) return true;
+            if (appState.searchTokens.length === 0) return true;
 
             // Fields to search: Energy Source, Power, Municipality, Canton, Date started
             const searchableText = [
@@ -1100,7 +1128,7 @@
             ].join(' ').toLowerCase();
 
             // All tokens must be found as substrings
-            return searchTokens.every(token => searchableText.includes(token));
+            return appState.searchTokens.every(token => searchableText.includes(token));
         }
 
         function sortFacilities(column, direction) {
@@ -1142,7 +1170,7 @@
 
         function setupCategoryCheckboxes() {
             categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
-            selectedCategories = [...categories]; // Initialize with all categories selected.
+            appState.selectedCategories = [...categories]; // Initialize with all categories selected.
             const container = document.getElementById('categoryTableBody');
             container.innerHTML = '';
 
@@ -1211,7 +1239,7 @@
         }
 
         function updateTableOrMap() {
-            if (isTableView) {
+            if (appState.isTableView) {
                 updateTable();
             } else {
                 updateMap();
@@ -1302,27 +1330,16 @@
         }
 
         function setupEventListeners() {
-            setupCategoryCheckboxEvents();
-            setupPowerRangeSlider();
-            setupSearch();
-            setupViewToggle();
-            setupTableSorting();
-            setupPagination();
+            setupFacilityCategories();
+            setupFacilityMapControls();
+            setupFacilityViewToggle();
+            setupFacilityTableControls();
             setupModeToggle();
-            setupProductionCheckboxEvents();
-            setupChartControls();
+            setupProductionCategories();
+            setupProductionControls();
         }
 
-        function setupChartControls() {
-            const resetZoomBtn = document.getElementById('resetZoom');
-            resetZoomBtn.addEventListener('click', () => {
-                if (productionChart) {
-                    productionChart.resetZoom();
-                }
-            });
-        }
-
-        function setupCategoryCheckboxEvents() {
+        function setupFacilityCategories() {
             const allCheckbox = document.getElementById('cat-select-all');
             document.getElementById('categoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
@@ -1332,11 +1349,11 @@
                         document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
                             if (cb.id !== 'cat-select-all') cb.checked = checked;
                         });
-                        selectedCategories = checked ? [...categories] : [];
+                        appState.selectedCategories = checked ? [...categories] : [];
                     } else {
-                        selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
+                        appState.selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
                         // Sync select-all checkbox
-                        const allChecked = selectedCategories.length === categories.length;
+                        const allChecked = appState.selectedCategories.length === categories.length;
                         allCheckbox.checked = allChecked;
                     }
                     updateTotals();
@@ -1345,11 +1362,11 @@
             });
         }
 
-        function setupPowerRangeSlider() {
+        function setupFacilityMapControls() {
             const powerRangeSlider = document.getElementById('powerRangeSlider');
             powerRangeSlider.noUiSlider.on('update', function(values, handle) {
-                minPower = Math.pow(10, values[0] - 1);
-                maxPower = Math.pow(10, values[1] - 1);
+                appState.minPower = Math.pow(10, values[0] - 1);
+                appState.maxPower = Math.pow(10, values[1] - 1);
 
                 function formatPower(power) {
                     if (power >= 1000000) {
@@ -1361,16 +1378,14 @@
                     }
                 }
 
-                const minDisplay = formatPower(minPower);
-                const maxDisplay = formatPower(maxPower);
+                const minDisplay = formatPower(appState.minPower);
+                const maxDisplay = formatPower(appState.maxPower);
 
                 document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
                 updateCategoriesAndTotals();
                 updateTableOrMap();
             });
-        }
 
-        function setupSearch() {
             const searchInput = document.getElementById('searchInput');
             searchInput.addEventListener('input', (e) => {
                 const searchText = e.target.value;
@@ -1380,11 +1395,78 @@
                     clearTimeout(searchTimeout);
                 }
                 searchTimeout = setTimeout(() => {
-                    searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+                    appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
                     updateCategoriesAndTotals();
                     updateTableOrMap();
                 }, 300); // 300ms delay
             });
+        }
+
+        function setupFacilityViewToggle() {
+            const viewToggle = document.getElementById('viewToggle');
+            viewToggle.addEventListener('click', () => {
+                if (appState.isProductionMode) return; // No effect in production mode
+
+                appState.isTableView = !appState.isTableView;
+                const mapContainer = document.getElementById('map');
+                const tableContainer = document.getElementById('tableView');
+                const toggleButton = document.getElementById('viewToggle');
+
+                if (appState.isTableView) {
+                    mapContainer.style.display = 'none';
+                    tableContainer.style.display = 'block';
+                    toggleButton.textContent = '🗺️ Map View';
+                    updateTable();
+                } else {
+                    mapContainer.style.display = 'block';
+                    tableContainer.style.display = 'none';
+                    toggleButton.textContent = '📊 Table View';
+                    updateMap();
+                }
+            });
+        }
+
+        function setupFacilityTableControls() {
+            const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
+            tableHeaders.forEach(header => {
+                header.addEventListener('click', () => {
+                    const column = header.dataset.sort;
+                    sortTable(column);
+                });
+            });
+
+            document.getElementById('firstPage').addEventListener('click', () => {
+                if (appState.currentPage > 1) {
+                    appState.currentPage = 1;
+                    renderTable();
+                }
+            });
+
+            document.getElementById('prevPage').addEventListener('click', () => {
+                if (appState.currentPage > 1) {
+                    appState.currentPage--;
+                    renderTable();
+                }
+            });
+
+            document.getElementById('nextPage').addEventListener('click', () => {
+                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+                if (appState.currentPage < totalPages) {
+                    appState.currentPage++;
+                    renderTable();
+                }
+            });
+
+            document.getElementById('lastPage').addEventListener('click', () => {
+                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+                if (appState.currentPage < totalPages) {
+                    appState.currentPage = totalPages;
+                    renderTable();
+                }
+            });
+
+            // Page number click => inline input
+            document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
         }
 
         function setupModeToggle() {
@@ -1392,9 +1474,9 @@
             const productionBtn = document.getElementById('productionMode');
 
             facilitiesBtn.addEventListener('click', () => {
-                if (!isProductionMode) return;
+                if (!appState.isProductionMode) return;
 
-                isProductionMode = false;
+                appState.isProductionMode = false;
                 facilitiesBtn.classList.add('active');
                 productionBtn.classList.remove('active');
 
@@ -1405,7 +1487,7 @@
 
                 // Show appropriate view
                 document.getElementById('productionView').style.display = 'none';
-                if (isTableView) {
+                if (appState.isTableView) {
                     document.getElementById('tableView').style.display = 'block';
                     document.getElementById('map').style.display = 'none';
                 } else {
@@ -1415,9 +1497,9 @@
             });
 
             productionBtn.addEventListener('click', () => {
-                if (isProductionMode) return;
+                if (appState.isProductionMode) return;
 
-                isProductionMode = true;
+                appState.isProductionMode = true;
                 productionBtn.classList.add('active');
                 facilitiesBtn.classList.remove('active');
 
@@ -1436,31 +1518,7 @@
             });
         }
 
-        function setupViewToggle() {
-            const viewToggle = document.getElementById('viewToggle');
-            viewToggle.addEventListener('click', () => {
-                if (isProductionMode) return; // No effect in production mode
-
-                isTableView = !isTableView;
-                const mapContainer = document.getElementById('map');
-                const tableContainer = document.getElementById('tableView');
-                const toggleButton = document.getElementById('viewToggle');
-
-                if (isTableView) {
-                    mapContainer.style.display = 'none';
-                    tableContainer.style.display = 'block';
-                    toggleButton.textContent = '🗺️ Map View';
-                    updateTable();
-                } else {
-                    mapContainer.style.display = 'block';
-                    tableContainer.style.display = 'none';
-                    toggleButton.textContent = '📊 Table View';
-                    updateMap();
-                }
-            });
-        }
-
-        function setupProductionCheckboxEvents() {
+        function setupProductionCategories() {
             const allCheckbox = document.getElementById('prod-cat-select-all');
             document.getElementById('productionCategoryTableBody').addEventListener('change', function(e) {
                 if (e.target.type === 'checkbox') {
@@ -1470,11 +1528,11 @@
                         document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
                             if (cb.id !== 'prod-cat-select-all') cb.checked = checked;
                         });
-                        selectedProductionCategories = checked ? [...productionCategories] : [];
+                        appState.selectedProductionCategories = checked ? [...productionCategories] : [];
                     } else {
-                        selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
+                        appState.selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
                         // Sync select-all checkbox
-                        const allChecked = selectedProductionCategories.length === productionCategories.length;
+                        const allChecked = appState.selectedProductionCategories.length === productionCategories.length;
                         allCheckbox.checked = allChecked;
                     }
                     updateProductionChart();
@@ -1482,54 +1540,18 @@
             });
         }
 
-        function setupTableSorting() {
-            const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
-            tableHeaders.forEach(header => {
-                header.addEventListener('click', () => {
-                    const column = header.dataset.sort;
-                    sortTable(column);
-                });
-            });
-        }
-
-        function setupPagination() {
-            document.getElementById('firstPage').addEventListener('click', () => {
-                if (currentPage > 1) {
-                    currentPage = 1;
-                    renderTable();
+        function setupProductionControls() {
+            const resetZoomBtn = document.getElementById('resetZoom');
+            resetZoomBtn.addEventListener('click', () => {
+                if (productionChart) {
+                    productionChart.resetZoom();
                 }
             });
-
-            document.getElementById('prevPage').addEventListener('click', () => {
-                if (currentPage > 1) {
-                    currentPage--;
-                    renderTable();
-                }
-            });
-
-            document.getElementById('nextPage').addEventListener('click', () => {
-                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    renderTable();
-                }
-            });
-
-            document.getElementById('lastPage').addEventListener('click', () => {
-                const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
-                if (currentPage < totalPages) {
-                    currentPage = totalPages;
-                    renderTable();
-                }
-            });
-
-            // Page number click => inline input
-            document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
         }
 
         function sortTable(column) {
-            const direction = (currentSort.column === column && currentSort.direction === 'asc') ? 'desc' : 'asc';
-            currentSort = { column, direction };
+            const direction = (appState.currentSort.column === column && appState.currentSort.direction === 'asc') ? 'desc' : 'asc';
+            appState.currentSort = { column, direction };
 
             // Clear all sort indicators and set the new one
             document.querySelectorAll('.sort-indicator').forEach(indicator => {
@@ -1546,19 +1568,19 @@
             updateTableOrMap();
 
             // Reset to first page after sorting
-            currentPage = 1;
+            appState.currentPage = 1;
             updateTableOrMap();
         }
 
         function updateTable() {
-            if (!isTableView) {
+            if (!appState.isTableView) {
                 throw new Error('updateTable called in map view');
             }
             // Use the same filtered facilities as the map (already sorted in underlying array)
             displayedFacilities = [...filteredFacilities];
 
             // Reset to first page when data changes
-            currentPage = 1;
+            appState.currentPage = 1;
             renderTable();
         }
 
@@ -1567,7 +1589,7 @@
             tbody.innerHTML = '';
 
             // Calculate pagination
-            const startIndex = (currentPage - 1) * facilitiesPerPage;
+            const startIndex = (appState.currentPage - 1) * facilitiesPerPage;
             const endIndex = Math.min(startIndex + facilitiesPerPage, displayedFacilities.length);
             const facilitiesToShow = displayedFacilities.slice(startIndex, endIndex);
 
@@ -1630,7 +1652,7 @@
             span.style.cursor = 'pointer';
             span.style.textDecoration = 'underline';
             span.style.color = '#2196F3';
-            span.textContent = currentPage.toString();
+            span.textContent = appState.currentPage.toString();
             span.addEventListener('click', handlePageNumberClick);
             return span;
         }
@@ -1640,7 +1662,7 @@
             input.type = 'number';
             input.min = '1';
             input.max = totalPages.toString();
-            input.value = currentPage.toString();
+            input.value = appState.currentPage.toString();
             input.style.width = '50px';
             input.style.textAlign = 'center';
             input.style.border = '1px solid #2196F3';
@@ -1663,7 +1685,7 @@
             const finishEdit = () => {
                 const pageNumber = parseInt(input.value);
                 if (pageNumber >= 1 && pageNumber <= totalPages) {
-                    currentPage = pageNumber;
+                    appState.currentPage = pageNumber;
                 }
                 // Restore span with current page number
                 const newSpan = createPageNumberSpan();
@@ -1687,16 +1709,17 @@
 
         function updatePaginationControls() {
             const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+            p = appState.currentPage;
 
             // Update page info
-            document.getElementById('currentPageNumber').textContent = currentPage;
+            document.getElementById('currentPageNumber').textContent = p;
             document.getElementById('totalPages').textContent = totalPages;
 
             // Update button states
-            document.getElementById('firstPage').disabled = currentPage <= 1;
-            document.getElementById('prevPage').disabled = currentPage <= 1;
-            document.getElementById('nextPage').disabled = currentPage >= totalPages;
-            document.getElementById('lastPage').disabled = currentPage >= totalPages;
+            document.getElementById('firstPage').disabled = appState.currentPage <= 1;
+            document.getElementById('prevPage').disabled = appState.currentPage <= 1;
+            document.getElementById('nextPage').disabled = appState.currentPage >= totalPages;
+            document.getElementById('lastPage').disabled = appState.currentPage >= totalPages;
         }
 
         function updateCategoriesAndTotals() {
@@ -1710,7 +1733,7 @@
             filteredFacilities = [];
 
             facilities
-                .filter(f => f.TotalPower >= minPower && f.TotalPower <= maxPower)
+                .filter(f => f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
                 .filter(f => facilityMatchesSearch(f))
                 .forEach(f => {
                     const category = f.SubCategory;
@@ -1722,7 +1745,7 @@
                     }
 
                     // Add to filtered facilities if category is selected
-                    if (selectedCategories.includes(category)) {
+                    if (appState.selectedCategories.includes(category)) {
                         filteredFacilities.push(f);
                         totalCapacity += f.TotalPower / 1000; // Convert to MW
                         totalCount++;
@@ -1744,7 +1767,7 @@
 
         function updateTotals() {
             filteredFacilities = facilities
-                .filter(f => selectedCategories.includes(f.SubCategory) && f.TotalPower >= minPower && f.TotalPower <= maxPower)
+                .filter(f => appState.selectedCategories.includes(f.SubCategory) && f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
                 .filter(f => facilityMatchesSearch(f));
             const totalCount = filteredFacilities.length;
             const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
@@ -1754,7 +1777,7 @@
         }
 
         function updateMap() {
-            if (isTableView) {
+            if (appState.isTableView) {
                 throw new Error('updateMap called in table view');
             }
             mapFacilities = filteredFacilities.filter(f => f.lat && f.lon)
@@ -1770,8 +1793,8 @@
                 radiusMinPixels: 2,
                 radiusMaxPixels: 100,
                 updateTriggers: {
-                    getFillColor: selectedCategories,
-                    getRadius: [minPower, maxPower]
+                    getFillColor: appState.selectedCategories,
+                    getRadius: [appState.minPower, appState.maxPower]
                 }
             });
 
@@ -1842,30 +1865,36 @@
                             text: 'Swiss energy production over time'
                         },
                         zoom: {
-                            zoom: {
-                                wheel: {
-                                    enabled: true,
-                                    speed: 0.1
-                                },
-                                pinch: {
-                                    enabled: true
-                                },
-                                drag: {
-                                    enabled: false
-                                },
-                                mode: 'x',
-                                onZoomComplete: ({chart}) => {
-                                    updateTimeUnit(chart);
-                                    updateProductionStats(chart.options.scales.x.min, chart.options.scales.x.max);
-                                }
-                            },
-                            pan: {
+                                                    zoom: {
+                            wheel: {
                                 enabled: true,
-                                mode: 'x',
-                                onPanComplete: ({chart}) => {
-                                    updateProductionStats(chart.scales.x.min, chart.scales.x.max);
-                                }
+                                speed: 0.1
                             },
+                            pinch: {
+                                enabled: true
+                            },
+                            drag: {
+                                enabled: false
+                            },
+                            mode: 'x',
+                            onZoomComplete: ({chart}) => {
+                                updateTimeUnit(chart);
+                                updateProductionStats(chart.options.scales.x.min, chart.options.scales.x.max);
+                                // Save chart bounds to state
+                                appState.productionChart.leftBound = chart.options.scales.x.min;
+                                appState.productionChart.rightBound = chart.options.scales.x.max;
+                            }
+                        },
+                        pan: {
+                            enabled: true,
+                            mode: 'x',
+                            onPanComplete: ({chart}) => {
+                                updateProductionStats(chart.scales.x.min, chart.scales.x.max);
+                                // Save chart bounds to state
+                                appState.productionChart.leftBound = chart.scales.x.min;
+                                appState.productionChart.rightBound = chart.scales.x.max;
+                            }
+                        },
                             limits: {
                                 x: {
                                     min: 'original',
@@ -2023,7 +2052,7 @@
             const aggregatedData = aggregateDataByTimeUnit(currentUnit);
             const datasets = [];
 
-            selectedProductionCategories.reverse().forEach((category, index) => {
+            appState.selectedProductionCategories.reverse().forEach((category, index) => {
                 const categoryIndex = productionCategories.indexOf(category);
                 if (categoryIndex === -1) return;
 
