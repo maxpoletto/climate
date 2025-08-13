@@ -16,7 +16,7 @@ all:
 	@echo ""
 	@echo "First time setup: write MapTiler API key to app/maptiler-key.txt"
 
-docker-build: Dockerfile requirements.txt
+docker-build: Dockerfile requirements.txt bin/import_data.py
 	docker build -t ch-energy-importer .
 	@touch docker-build
 
