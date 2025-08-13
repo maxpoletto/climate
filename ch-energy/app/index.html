@@ -885,8 +885,8 @@
 
             // Production chart state
             productionChart: {
-                leftBound: null,
-                rightBound: null
+                xmin: null,
+                xmax: null
             }
         };
 
@@ -1880,9 +1880,8 @@
                             onZoomComplete: ({chart}) => {
                                 updateTimeUnit(chart);
                                 updateProductionStats(chart.options.scales.x.min, chart.options.scales.x.max);
-                                // Save chart bounds to state
-                                appState.productionChart.leftBound = chart.options.scales.x.min;
-                                appState.productionChart.rightBound = chart.options.scales.x.max;
+                                appState.productionChart.xmin = chart.options.scales.x.min;
+                                appState.productionChart.xmax = chart.options.scales.x.max;
                             }
                         },
                         pan: {
@@ -1890,9 +1889,8 @@
                             mode: 'x',
                             onPanComplete: ({chart}) => {
                                 updateProductionStats(chart.scales.x.min, chart.scales.x.max);
-                                // Save chart bounds to state
-                                appState.productionChart.leftBound = chart.scales.x.min;
-                                appState.productionChart.rightBound = chart.scales.x.max;
+                                appState.productionChart.xmin = chart.scales.x.min;
+                                appState.productionChart.xmax = chart.scales.x.max;
                             }
                         },
                             limits: {
@@ -2078,7 +2076,12 @@
             if (minDate && maxDate) {
                 productionChart.options.scales.x.min = minDate;
                 productionChart.options.scales.x.max = maxDate;
+            } else if (appState.productionChart.xmin && appState.productionChart.xmax) {
+                // Use saved bounds from state
+                productionChart.options.scales.x.min = appState.productionChart.xmin;
+                productionChart.options.scales.x.max = appState.productionChart.xmax;
             } else {
+                // Default to full data range
                 productionChart.options.scales.x.min = aggregatedData[0].date;
                 productionChart.options.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
             }
