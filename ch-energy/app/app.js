@@ -52,15 +52,21 @@ function decodeFloat(value, setter, min = null, max = null) {
     }
 }
 
+let serializeTimeout = null;
 function serializeStateToURL() {
     // Serialize the full appState to JSON and encode as base64
-    const encodedState = btoa(JSON.stringify(appState));
+    if (serializeTimeout) {
+        clearTimeout(serializeTimeout);
+    }
 
-    // Update URL without triggering a page reload
-    const newURL = `${window.location.pathname}?s=${encodedState}`;
-    window.history.replaceState({}, '', newURL);
-    console.log('encoded state', appState);
-    console.trace();
+    serializeTimeout = setTimeout(() => {
+        const encodedState = btoa(JSON.stringify(appState));
+
+        // Update URL without triggering a page reload
+        const newURL = `${window.location.pathname}?s=${encodedState}`;
+        window.history.replaceState({}, '', newURL);
+        console.log('encoded state', appState);
+    }, 300 /* ms */);
 }
 
 function deserializeStateFromURL() {
