@@ -828,27 +828,6 @@ function updateTableOrMap() {
     }
 }
 
-function updateProductionStats(minDate, maxDate) {
-    const totals = new Array(6).fill(0);
-    let count = 0;
-
-    productionData.forEach(record => {
-        if (record.date < minDate || record.date > maxDate) return;
-        record.prod.forEach((value, index) => {
-            totals[index] += value;
-        });
-        count++;
-    });
-
-    PRODUCTION_CATEGORIES.forEach((category, index) => {
-        const avgElement = document.getElementById(`prod-avg-${index}`);
-        if (avgElement) {
-            const avg = totals[index] / count;
-            avgElement.textContent = avg.toFixed(1);
-        }
-    });
-}
-
 function modeFacilities() {
     const facilitiesBtn = document.getElementById('facilitiesMode');
     const productionBtn = document.getElementById('productionMode');
@@ -1162,6 +1141,10 @@ function updateMap() {
     serializeStateToURL();
 }
 
+///////////////////////////////////////////////////////////////////////////////
+// Production mode
+///////////////////////////////////////////////////////////////////////////////
+
 function createProductionChart() {
     const ctx = document.getElementById('productionChart').getContext('2d');
 
@@ -1207,9 +1190,10 @@ function createProductionChart() {
                         mode: 'x',
                         onZoomComplete: ({ chart }) => {
                             updateTimeUnit(chart);
-                            updateProductionStats(chart.options.scales.x.min, chart.options.scales.x.max);
-                            appState.productionChart.xmin = chart.options.scales.x.min;
-                            appState.productionChart.xmax = chart.options.scales.x.max;
+                            updateProductionChart(chart.scales.x.min, chart.scales.x.max);
+                            updateProductionStats(chart.scales.x.min, chart.scales.x.max);
+                            appState.productionChart.xmin = chart.scales.x.min;
+                            appState.productionChart.xmax = chart.scales.x.max;
                             serializeStateToURL();
                         }
                     },
@@ -1352,9 +1336,8 @@ function updateTimeUnit(chart) {
         return;
     }
 
-    const xScale = chart.scales.x;
     // chart.scales.x.{max,min} are Unix timestamps in milliseconds
-    const range = xScale.max - xScale.min;
+    const range = chart.scales.x.max - chart.scales.x.min;
     const days = range / 24 / 60 / 60 / 1000;
 
     let unit = 'quarter', tooltipFormat = 'MMM yyyy';
@@ -1367,7 +1350,27 @@ function updateTimeUnit(chart) {
     // console.log(`Zoom: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
     chart.options.scales.x.time.unit = unit;
     chart.options.scales.x.time.tooltipFormat = tooltipFormat;
-    updateProductionChart(xScale.min, xScale.max);
+}
+
+function updateProductionStats(minDate, maxDate) {
+    const totals = new Array(6).fill(0);
+    let count = 0;
+
+    productionData.forEach(record => {
+        if (record.date < minDate || record.date > maxDate) return;
+        record.prod.forEach((value, index) => {
+            totals[index] += value;
+        });
+        count++;
+    });
+
+    PRODUCTION_CATEGORIES.forEach((category, index) => {
+        const avgElement = document.getElementById(`prod-avg-${index}`);
+        if (avgElement) {
+            const avg = totals[index] / count;
+            avgElement.textContent = avg.toFixed(1);
+        }
+    });
 }
 
 function updateProductionChart(minDate, maxDate) {
@@ -1404,16 +1407,16 @@ function updateProductionChart(minDate, maxDate) {
 
     // Set zoom and pan limits to data range
     if (minDate && maxDate) {
-        productionChart.options.scales.x.min = minDate;
-        productionChart.options.scales.x.max = maxDate;
+        productionChart.scales.x.min = minDate;
+        productionChart.scales.x.max = maxDate;
     } else if (appState.productionChart.xmin && appState.productionChart.xmax) {
         // Use saved bounds from state
-        productionChart.options.scales.x.min = appState.productionChart.xmin;
-        productionChart.options.scales.x.max = appState.productionChart.xmax;
+        productionChart.scales.x.min = appState.productionChart.xmin;
+        productionChart.scales.x.max = appState.productionChart.xmax;
     } else {
         // Default to full data range
-        productionChart.options.scales.x.min = aggregatedData[0].date;
-        productionChart.options.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
+        productionChart.scales.x.min = aggregatedData[0].date;
+        productionChart.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
     }
     productionChart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
     productionChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
