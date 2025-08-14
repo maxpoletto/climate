@@ -1,7 +1,73 @@
+///////////////////////////////////////////////////////////////////////////////
+// Constants
+///////////////////////////////////////////////////////////////////////////////
+
+// Color palette for different categories
+const FACILITIES_CATEGORY_COLORS = {
+    'Photovoltaic': [255, 193, 7],         // Amber/Yellow - solar
+    'Hydroelectric power': [33, 150, 243], // Blue - water
+    'Wind energy': [76, 175, 80],          // Green - wind
+    'Biomass': [139, 69, 19],              // Brown - organic
+    'Natural gas': [255, 87, 34],          // Orange-red - gas
+    'Waste': [100, 100, 100],              // Gray - waste
+    'Nuclear energy': [156, 39, 176],      // Purple - nuclear
+    'Crude oil': [96, 125, 139]            // Blue-gray - oil
+};
+
+// Color palette for production categories
+// (same colors as facilities categories for matching categories)
+const PRODUCTION_CATEGORY_COLORS = {
+    'Hydro (pumped)': [33, 150, 243],      // Blue
+    'Hydro (river)': [21, 101, 192],       // Darker blue
+    'Nuclear': [156, 39, 176],             // Purple
+    'Photovoltaic': [255, 193, 7],         // Amber/Yellow
+    'Thermal': [255, 87, 34],              // Orange-red
+    'Wind': [76, 175, 80]                  // Green
+};
+
+// Time unit names for production chart title
+const TIME_UNIT_NAMES = {
+    'day': 'Daily',
+    'week': 'Weekly',
+    'month': 'Monthly',
+    'quarter': 'Quarterly'
+};
+
+// Production categories (from production.json.gz)
+const PRODUCTION_CATEGORIES = [
+    'Hydro (pumped)',
+    'Hydro (river)',
+    'Nuclear',
+    'Photovoltaic',
+    'Thermal',
+    'Wind'
+];
+
+const TABLE_COLUMNS = ["SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps"];
+const TABLE_NUM_ROWS = 50;       // Show 50 facilities per page
+const DEBOUNCE_MS = 300;         // 300ms delay to debounce expensive UI interactions.
+
+///////////////////////////////////////////////////////////////////////////////
+// Global state
+///////////////////////////////////////////////////////////////////////////////
+
 let MAPTILER_KEY = null;         // Load from file.
+let deckgl = null;               // DeckGL instance.
 const { Deck, ScatterplotLayer } = deck;
-let deckgl;                      // DeckGL instance.
+
 let lastUpdate = null;           // Last data update date string.
+let isInitializing = true;       // Flag to prevent nouiSlider callbacks from being called during initialization
+
+let facilities = [];             // All power facilities.
+let filteredFacilities = [];     // Facilities that match the current selection (category, power range)
+let mapFacilities = [];          // Facilities that match the current selection (category, power range) and have GPS coordinates
+let categories = [];             // All categories (solar, hydro, etc.)
+
+let displayedFacilities = [];    // Currently displayed facilities in table
+
+// Production data state
+let productionData = [];         // Historical production data
+let productionChart = null;      // Chart.js instance
 
 // Global state object
 const appState = {
@@ -12,10 +78,10 @@ const appState = {
     isTableView: false,
     currentSort: { column: 'TotalPower', direction: 'desc' },
     currentPage: 1,
-    selectedCategories: null,
     minPower: 0.1,
     maxPower: 2000000,
     searchTokens: [],
+    selectedFacilitiesCategories: null,
 
     // Production mode state
     selectedProductionCategories: null,
@@ -67,7 +133,7 @@ function serializeStateToURL() {
         const newURL = `${window.location.pathname}?s=${encodedState}`;
         window.history.replaceState({}, '', newURL);
         console.log('encoded state', appState);
-    }, 300 /* ms */);
+    }, DEBOUNCE_MS);
 }
 
 function deserializeStateFromURL() {
@@ -89,7 +155,7 @@ function deserializeStateFromURL() {
         }
         if (state.currentSort && typeof state.currentSort === 'object') {
             if (state.currentSort.column && state.currentSort.direction
-                && tableColumns.includes(state.currentSort.column)
+                && TABLE_COLUMNS.includes(state.currentSort.column)
                 && (state.currentSort.direction === 'asc' || state.currentSort.direction === 'desc')) {
                 appState.currentSort = {
                     column: String(state.currentSort.column),
@@ -101,8 +167,8 @@ function deserializeStateFromURL() {
         if (Array.isArray(state.selectedCategories)) {
             console.log('selectedCategories', state.selectedCategories);
             console.log('categories', categories);
-            appState.selectedCategories = state.selectedCategories.filter(c => typeof c === 'string' && categories.includes(c));
-            console.log('appState.selectedCategories', appState.selectedCategories);
+            appState.selectedFacilitiesCategories = state.selectedCategories.filter(c => typeof c === 'string' && categories.includes(c));
+            console.log('appState.selectedCategories', appState.selectedFacilitiesCategories);
         }
         decodeFloat(state.minPower, (val) => appState.minPower = val, 0);
         decodeFloat(state.maxPower, (val) => appState.maxPower = val, 0);
@@ -187,61 +253,6 @@ function modeProduction() {
     updateProductionChart();
 }
 
-let facilities = [];             // All power facilities.
-let numFacilitiesWithCoords = 0; // Number of facilities with GPS coordinates
-let filteredFacilities = [];     // Facilities that match the current selection (category, power range)
-let mapFacilities = [];          // Facilities that match the current selection (category, power range) and have GPS coordinates
-let categories = [];             // All categories (solar, hydro, etc.)
-let searchTimeout = null;        // Debounce timeout for search
-let isInitializing = true;       // Flag to prevent nouiSlider callbacks from being called during initialization
-
-// Table view state
-let displayedFacilities = [];    // Currently displayed facilities in table
-const facilitiesPerPage = 50;    // Show 50 facilities per page
-
-// Production data state
-let productionData = [];         // Historical production data
-let productionChart = null;      // Chart.js instance
-let productionCategories = [     // Production categories (from prod.json.gz)
-    'Hydro (pumped)',
-    'Hydro (river)',
-    'Nuclear',
-    'Photovoltaic',
-    'Thermal',
-    'Wind'
-];
-
-// Color palette for different categories
-const CATEGORY_COLORS = {
-    'Photovoltaic': [255, 193, 7],         // Amber/Yellow - solar
-    'Hydroelectric power': [33, 150, 243], // Blue - water
-    'Wind energy': [76, 175, 80],          // Green - wind
-    'Biomass': [139, 69, 19],              // Brown - organic
-    'Natural gas': [255, 87, 34],          // Orange-red - gas
-    'Waste': [100, 100, 100],              // Gray - waste
-    'Nuclear energy': [156, 39, 176],      // Purple - nuclear
-    'Crude oil': [96, 125, 139]            // Blue-gray - oil
-};
-
-// Color palette for production categories (same colors as categories for matching categories)
-const PRODUCTION_COLORS = {
-    'Hydro (pumped)': [33, 150, 243],      // Blue
-    'Hydro (river)': [21, 101, 192],       // Darker blue
-    'Nuclear': [156, 39, 176],             // Purple
-    'Photovoltaic': [255, 193, 7],         // Amber/Yellow
-    'Thermal': [255, 87, 34],              // Orange-red
-    'Wind': [76, 175, 80]                  // Green
-};
-
-// Time unit names for production chart title
-const timeUnitNames = {
-    'day': 'Daily',
-    'week': 'Weekly',
-    'month': 'Monthly',
-    'quarter': 'Quarterly'
-};
-
-const tableColumns = ["SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps"];
 
 async function loadMapTilerKey() {
     const response = await fetch('maptiler-key.txt');
@@ -366,7 +377,7 @@ function initializeUI() {
         allCheckbox.type = 'checkbox';
         allCheckbox.className = 'category-checkbox';
         allCheckbox.id = 'cat-select-all';
-        allCheckbox.checked = appState.selectedCategories.length === categories.length;
+        allCheckbox.checked = appState.selectedFacilitiesCategories.length === categories.length;
         const allLabel = document.createElement('label');
         allLabel.htmlFor = 'cat-select-all';
         allLabel.textContent = 'Select/Deselect All';
@@ -389,7 +400,7 @@ function initializeUI() {
             checkbox.className = 'category-checkbox';
             checkbox.id = `cat-${category.replace(/\s+/g, '-')}`;
             checkbox.value = category;
-            checkbox.checked = appState.selectedCategories.includes(category);
+            checkbox.checked = appState.selectedFacilitiesCategories.includes(category);
 
             const label = document.createElement('label');
             label.className = 'category-label';
@@ -397,7 +408,7 @@ function initializeUI() {
 
             const colorIndicator = document.createElement('span');
             colorIndicator.className = 'color-indicator';
-            const color = CATEGORY_COLORS[category] || [128, 128, 128];
+            const color = FACILITIES_CATEGORY_COLORS[category] || [128, 128, 128];
             colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
 
             const text = document.createElement('span');
@@ -434,7 +445,7 @@ function initializeUI() {
         allCheckbox.type = 'checkbox';
         allCheckbox.className = 'category-checkbox';
         allCheckbox.id = 'prod-cat-select-all';
-        allCheckbox.checked = appState.selectedProductionCategories.length === productionCategories.length;
+        allCheckbox.checked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
         const allLabel = document.createElement('label');
         allLabel.htmlFor = 'prod-cat-select-all';
         allLabel.textContent = 'Select/Deselect All';
@@ -446,7 +457,7 @@ function initializeUI() {
         tr.appendChild(allTd);
         container.appendChild(tr);
 
-        productionCategories.forEach((category, index) => {
+        PRODUCTION_CATEGORIES.forEach((category, index) => {
             tr = document.createElement('tr');
 
             // Source column with checkbox and color indicator
@@ -465,7 +476,7 @@ function initializeUI() {
 
             const colorIndicator = document.createElement('span');
             colorIndicator.className = 'color-indicator';
-            const color = PRODUCTION_COLORS[category] || [128, 128, 128];
+            const color = PRODUCTION_CATEGORY_COLORS[category] || [128, 128, 128];
             colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
 
             const text = document.createElement('span');
@@ -538,7 +549,7 @@ function initializeUI() {
         updateTableOrMap();
     }
 
-    setupEventListeners();
+    setupEventHandlers();
 }
 
 async function loadData() {
@@ -553,7 +564,7 @@ async function loadData() {
             throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
         }
         facilities = await facilitiesResponse.json();
-        numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
+        const numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
         categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
 
         // Download production data.
@@ -581,11 +592,11 @@ async function loadData() {
 
         if (appState.selectedProductionCategories === null) {
             // Initialize with all production categories on first load.
-            appState.selectedProductionCategories = [...productionCategories];
+            appState.selectedProductionCategories = [...PRODUCTION_CATEGORIES];
         }
-        if (appState.selectedCategories === null) {
+        if (appState.selectedFacilitiesCategories === null) {
             // Initialize with all categories on first load.
-            appState.selectedCategories = [...categories];
+            appState.selectedFacilitiesCategories = [...categories];
         }
 
         // Hide loading overlay after successful data load
@@ -680,7 +691,7 @@ function updateProductionStats(minDate, maxDate) {
         count++;
     });
 
-    productionCategories.forEach((category, index) => {
+    PRODUCTION_CATEGORIES.forEach((category, index) => {
         const avgElement = document.getElementById(`prod-avg-${index}`);
         if (avgElement) {
             const avg = totals[index] / count;
@@ -689,97 +700,95 @@ function updateProductionStats(minDate, maxDate) {
     });
 }
 
-function formatPower(power) {
-    if (power >= 1000000) {
-        return `${(power / 1000000).toFixed(1)} GW`;
-    } else if (power >= 1000) {
-        return `${(power / 1000).toFixed(1)} MW`;
-    } else {
-        return `${power.toFixed(1)} kW`;
+///////////////////////////////////////////////////////////////////////////////
+// Event handlers
+///////////////////////////////////////////////////////////////////////////////
+
+function callbackModeFacilities() {
+    if (!appState.isProductionMode) {
+        throw new Error('callbackModeFacilities called in facilities mode');
     }
+    appState.isProductionMode = false;
+    modeFacilities();
+    serializeStateToURL();
 }
 
-function setupEventListeners() {
+function callbackModeProduction() {
+    if (appState.isProductionMode) {
+        throw new Error('callbackModeProduction called in production mode');
+    }
+    appState.isProductionMode = true;
+    modeProduction();
+    serializeStateToURL();
+}
 
-    function _facilityCategories() {
-        const allCheckbox = document.getElementById('cat-select-all');
-        document.getElementById('categoryTableBody').addEventListener('change', function (e) {
-            if (e.target.type === 'checkbox') {
-                if (e.target.id === 'cat-select-all') {
-                    // Select/deselect all
-                    const checked = e.target.checked;
-                    document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
-                        if (cb.id !== 'cat-select-all') cb.checked = checked;
-                    });
-                    appState.selectedCategories = checked ? [...categories] : [];
-                } else {
-                    appState.selectedCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
-                    // Sync select-all checkbox
-                    const allChecked = appState.selectedCategories.length === categories.length;
-                    allCheckbox.checked = allChecked;
-                }
-                updateTotals();
-                updateTableOrMap();
-            }
-        });
+function callbackFacilityViewToggle() {
+    if (appState.isProductionMode) {
+        throw new Error('callbackFacilityViewToggle called in production mode');
     }
 
-    function _facilityMapControls() {
-        const powerRangeSlider = document.getElementById('powerRangeSlider');
-        powerRangeSlider.noUiSlider.on('update', function (values, handle) {
-            appState.minPower = Math.pow(10, values[0] - 1);
-            appState.maxPower = Math.pow(10, values[1] - 1);
-            const minDisplay = formatPower(appState.minPower);
-            const maxDisplay = formatPower(appState.maxPower);
+    appState.isTableView = !appState.isTableView;
+    const mapContainer = document.getElementById('map');
+    const tableContainer = document.getElementById('tableView');
+    const toggleButton = document.getElementById('viewToggle');
 
-            document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
-            updateFacilityCategories();
-            if (isInitializing) {
-                return;
-            }
-            updateTableOrMap();
-        });
-
-        const searchInput = document.getElementById('searchInput');
-        searchInput.addEventListener('input', (e) => {
-            const searchText = e.target.value;
-
-            // Use a timeout to debounce search (reduce expensive filter computations).
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
-            }
-            searchTimeout = setTimeout(() => {
-                appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
-                updateFacilityCategories();
-                updateTableOrMap();
-            }, 300); // 300ms delay
-        });
+    if (appState.isTableView) {
+        mapContainer.style.display = 'none';
+        tableContainer.style.display = 'block';
+        toggleButton.textContent = '🗺️ Map View';
+    } else {
+        mapContainer.style.display = 'block';
+        tableContainer.style.display = 'none';
+        toggleButton.textContent = '📊 Table View';
     }
+    updateTableOrMap();
+}
 
-    function _facilityViewToggle() {
-        const viewToggle = document.getElementById('viewToggle');
-        viewToggle.addEventListener('click', () => {
-            if (appState.isProductionMode) return; // No effect in production mode
-
-            appState.isTableView = !appState.isTableView;
-            const mapContainer = document.getElementById('map');
-            const tableContainer = document.getElementById('tableView');
-            const toggleButton = document.getElementById('viewToggle');
-
-            if (appState.isTableView) {
-                mapContainer.style.display = 'none';
-                tableContainer.style.display = 'block';
-                toggleButton.textContent = '🗺️ Map View';
-            } else {
-                mapContainer.style.display = 'block';
-                tableContainer.style.display = 'none';
-                toggleButton.textContent = '📊 Table View';
-            }
-            updateTableOrMap();
-        });
+function callbackPowerSlider(values, handle) {
+    function formatPower(power) {
+        if (power >= 1000000) {
+            return `${(power / 1000000).toFixed(1)} GW`;
+        } else if (power >= 1000) {
+            return `${(power / 1000).toFixed(1)} MW`;
+        } else {
+            return `${power.toFixed(1)} kW`;
+        }
     }
+    appState.minPower = Math.pow(10, values[0] - 1);
+    appState.maxPower = Math.pow(10, values[1] - 1);
+    const minDisplay = formatPower(appState.minPower);
+    const maxDisplay = formatPower(appState.maxPower);
 
-    function _facilityTableControls() {
+    document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
+    updateFacilityCategories();
+    if (isInitializing) {
+        return;
+    }
+    updateTableOrMap();
+}
+
+let searchTimeout = null;
+function callbackSearchInput(e) {
+    const searchText = e.target.value;
+    // Debounce search (reduce expensive filter computations).
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    searchTimeout = setTimeout(() => {
+        appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+        updateFacilityCategories();
+        updateTableOrMap();
+    }, DEBOUNCE_MS);
+}
+
+function callbackProductionResetZoom() {
+    if (!productionChart) return;
+    productionChart.resetZoom();
+}
+
+function setupEventHandlers() {
+
+    function _setupTableEventHandlers() {
         const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
         tableHeaders.forEach(header => {
             header.addEventListener('click', () => {
@@ -803,7 +812,7 @@ function setupEventListeners() {
         });
 
         document.getElementById('nextPage').addEventListener('click', () => {
-            const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+            const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
             if (appState.currentPage < totalPages) {
                 appState.currentPage++;
                 updateTable();
@@ -811,7 +820,7 @@ function setupEventListeners() {
         });
 
         document.getElementById('lastPage').addEventListener('click', () => {
-            const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+            const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
             if (appState.currentPage < totalPages) {
                 appState.currentPage = totalPages;
                 updateTable();
@@ -822,26 +831,30 @@ function setupEventListeners() {
         document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
     }
 
-    function _modeToggle() {
-        const facilitiesBtn = document.getElementById('facilitiesMode');
-        const productionBtn = document.getElementById('productionMode');
-
-        facilitiesBtn.addEventListener('click', () => {
-            if (!appState.isProductionMode) return;
-            appState.isProductionMode = false;
-            modeFacilities();
-            serializeStateToURL();
-        });
-
-        productionBtn.addEventListener('click', () => {
-            if (appState.isProductionMode) return;
-            appState.isProductionMode = true;
-            modeProduction();
-            serializeStateToURL();
+    function _setupFacilityCategorySelectorHandlers() {
+        const allCheckbox = document.getElementById('cat-select-all');
+        document.getElementById('categoryTableBody').addEventListener('change', function (e) {
+            if (e.target.type === 'checkbox') {
+                if (e.target.id === 'cat-select-all') {
+                    // Select/deselect all
+                    const checked = e.target.checked;
+                    document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
+                        if (cb.id !== 'cat-select-all') cb.checked = checked;
+                    });
+                    appState.selectedFacilitiesCategories = checked ? [...categories] : [];
+                } else {
+                    appState.selectedFacilitiesCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
+                    // Sync select-all checkbox
+                    const allChecked = appState.selectedFacilitiesCategories.length === categories.length;
+                    allCheckbox.checked = allChecked;
+                }
+                updateTotals();
+                updateTableOrMap();
+            }
         });
     }
 
-    function _productionCategories() {
+    function _setupProductionCategorySelectorHandlers() {
         const allCheckbox = document.getElementById('prod-cat-select-all');
         document.getElementById('productionCategoryTableBody').addEventListener('change', function (e) {
             if (e.target.type === 'checkbox') {
@@ -851,11 +864,11 @@ function setupEventListeners() {
                     document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
                         if (cb.id !== 'prod-cat-select-all') cb.checked = checked;
                     });
-                    appState.selectedProductionCategories = checked ? [...productionCategories] : [];
+                    appState.selectedProductionCategories = checked ? [...PRODUCTION_CATEGORIES] : [];
                 } else {
                     appState.selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
                     // Sync select-all checkbox
-                    const allChecked = appState.selectedProductionCategories.length === productionCategories.length;
+                    const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
                     allCheckbox.checked = allChecked;
                 }
                 updateProductionChart();
@@ -864,22 +877,29 @@ function setupEventListeners() {
         });
     }
 
-    function _productionControls() {
-        const resetZoomBtn = document.getElementById('resetZoom');
-        resetZoomBtn.addEventListener('click', () => {
-            if (productionChart) {
-                productionChart.resetZoom();
-            }
-        });
-    }
+    _setupTableEventHandlers();
+    _setupFacilityCategorySelectorHandlers();
+    _setupProductionCategorySelectorHandlers();
 
-    _facilityCategories();
-    _facilityMapControls();
-    _facilityViewToggle();
-    _facilityTableControls();
-    _modeToggle();
-    _productionCategories();
-    _productionControls();
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    facilitiesBtn.addEventListener('click', callbackModeFacilities);
+
+    const productionBtn = document.getElementById('productionMode');
+    productionBtn.addEventListener('click', callbackModeProduction);
+
+    const viewToggle = document.getElementById('viewToggle');
+    viewToggle.addEventListener('click', callbackFacilityViewToggle);
+
+    const powerRangeSlider = document.getElementById('powerRangeSlider');
+    powerRangeSlider.noUiSlider.on('update', callbackPowerSlider);
+
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', callbackSearchInput);
+
+
+    const resetZoomBtn = document.getElementById('resetZoom');
+    resetZoomBtn.addEventListener('click', callbackProductionResetZoom);
+
 }
 
 function sortTable(column) {
@@ -916,8 +936,8 @@ function updateTable(reset = false) {
     tbody.innerHTML = '';
 
     // Calculate pagination
-    const startIndex = (appState.currentPage - 1) * facilitiesPerPage;
-    const endIndex = Math.min(startIndex + facilitiesPerPage, displayedFacilities.length);
+    const startIndex = (appState.currentPage - 1) * TABLE_NUM_ROWS;
+    const endIndex = Math.min(startIndex + TABLE_NUM_ROWS, displayedFacilities.length);
     const facilitiesToShow = displayedFacilities.slice(startIndex, endIndex);
 
     facilitiesToShow.forEach(facility => {
@@ -928,7 +948,7 @@ function updateTable(reset = false) {
         sourceCell.className = 'energy-source-cell';
         const colorIndicator = document.createElement('span');
         colorIndicator.className = 'table-color-indicator';
-        const color = CATEGORY_COLORS[facility.SubCategory] || [128, 128, 128];
+        const color = FACILITIES_CATEGORY_COLORS[facility.SubCategory] || [128, 128, 128];
         colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
         sourceCell.appendChild(colorIndicator);
         sourceCell.appendChild(document.createTextNode(facility.SubCategory || ''));
@@ -1002,7 +1022,7 @@ function createPageNumberInput() {
 
 function handlePageNumberClick(e) {
     const span = e.target;
-    const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+    const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
 
     // Replace span with input
     const input = createPageNumberInput();
@@ -1036,7 +1056,7 @@ function handlePageNumberClick(e) {
 }
 
 function updatePaginationControls() {
-    const totalPages = Math.ceil(displayedFacilities.length / facilitiesPerPage);
+    const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
     p = appState.currentPage;
 
     // Update page info
@@ -1073,7 +1093,7 @@ function updateFacilityCategories() {
             }
 
             // Add to filtered facilities if category is selected
-            if (appState.selectedCategories.includes(category)) {
+            if (appState.selectedFacilitiesCategories.includes(category)) {
                 filteredFacilities.push(f);
                 totalCapacity += f.TotalPower / 1000; // Convert to MW
                 totalCount++;
@@ -1095,7 +1115,7 @@ function updateFacilityCategories() {
 
 function updateTotals() {
     filteredFacilities = facilities
-        .filter(f => appState.selectedCategories.includes(f.SubCategory) && f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
+        .filter(f => appState.selectedFacilitiesCategories.includes(f.SubCategory) && f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
         .filter(f => facilityMatchesSearch(f));
     const totalCount = filteredFacilities.length;
     const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
@@ -1113,7 +1133,7 @@ function updateMap() {
         id: 'facilities',
         data: mapFacilities,
         getPosition: d => [d.lon, d.lat],
-        getFillColor: d => CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
+        getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
         getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
         radiusUnits: 'meters',
         opacity: 0.4,
@@ -1121,7 +1141,7 @@ function updateMap() {
         radiusMinPixels: 2,
         radiusMaxPixels: 100,
         updateTriggers: {
-            getFillColor: appState.selectedCategories,
+            getFillColor: appState.selectedFacilitiesCategories,
             getRadius: [appState.minPower, appState.maxPower]
         }
     });
@@ -1129,7 +1149,6 @@ function updateMap() {
     deckgl.setProps({ layers: [scatterplotLayer] });
 
     console.log('lastUpdate', lastUpdate);
-    console.trace();
     document.getElementById('annotations').innerHTML =
         `${filteredFacilities.length.toLocaleString()} facilities match filters.<br/>Map shows ${mapFacilities.length.toLocaleString()} facilities.` +
         `<span class="info-asterisk">*` +
@@ -1359,7 +1378,7 @@ function updateProductionChart(minDate, maxDate) {
     const datasets = [];
 
     [...appState.selectedProductionCategories].reverse().forEach((category, index) => {
-        const categoryIndex = productionCategories.indexOf(category);
+        const categoryIndex = PRODUCTION_CATEGORIES.indexOf(category);
         if (categoryIndex === -1) return;
 
         const data = aggregatedData.map(record => ({
@@ -1370,15 +1389,15 @@ function updateProductionChart(minDate, maxDate) {
         datasets.push({
             label: category,
             data: data,
-            backgroundColor: `rgba(${PRODUCTION_COLORS[category].join(',')}, 0.8)`,
-            borderColor: `rgb(${PRODUCTION_COLORS[category].join(',')})`,
+            backgroundColor: `rgba(${PRODUCTION_CATEGORY_COLORS[category].join(',')}, 0.8)`,
+            borderColor: `rgb(${PRODUCTION_CATEGORY_COLORS[category].join(',')})`,
             borderWidth: 1,
             stack: 'production'
         });
     });
 
     productionChart.data.datasets = datasets;
-    productionChart.options.plugins.title.text = `Energy production (GWh ${timeUnitNames[currentUnit]})`;
+    productionChart.options.plugins.title.text = `Energy production (GWh ${TIME_UNIT_NAMES[currentUnit]})`;
 
     // Set zoom and pan limits to data range
     if (minDate && maxDate) {
