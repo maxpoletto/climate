@@ -105,24 +105,6 @@ const appState = {
 // State serialization/deserialization functions
 ///////////////////////////////////////////////////////////////////////////////
 
-function decodeInt(value, setter, min = 1) {
-    if (value !== undefined) {
-        const num = parseInt(value);
-        if (!isNaN(num) && num >= min) {
-            setter(num);
-        }
-    }
-}
-
-function decodeFloat(value, setter, min = null, max = null) {
-    if (value !== undefined) {
-        const num = parseFloat(value);
-        if (!isNaN(num) && (min === null || num >= min) && (max === null || num <= max)) {
-            setter(num);
-        }
-    }
-}
-
 let serializeTimeout = null;
 function serializeStateToURL() {
     // Serialize the full appState to JSON and encode as base64
@@ -141,16 +123,32 @@ function serializeStateToURL() {
 }
 
 function deserializeStateFromURL() {
+    function decodeInt(value, setter, min = null) {
+        if (value !== undefined && value !== null) {
+            const num = parseInt(value);
+            if (!isNaN(num) && (min === null || num >= min)) {
+                setter(num);
+            }
+        }
+    }
+
+    function decodeFloat(value, setter, min = null, max = null) {
+        if (value !== undefined && value !== null) {
+            const num = parseFloat(value);
+            if (!isNaN(num) && (min === null || num >= min) && (max === null || num <= max)) {
+                setter(num);
+            }
+        }
+    }
+
     const params = new URLSearchParams(window.location.search);
     const encodedState = params.get('s');
 
     if (!encodedState) return;
 
     try {
-        // Decode base64 and parse JSON
         const state = JSON.parse(atob(encodedState));
 
-        // Validate and apply the deserialized state to appState
         if (state.isProductionMode !== undefined) {
             appState.isProductionMode = Boolean(state.isProductionMode);
         }
@@ -168,11 +166,9 @@ function deserializeStateFromURL() {
             }
         }
         decodeInt(state.currentPage, (val) => appState.currentPage = val);
-        if (Array.isArray(state.selectedCategories)) {
-            console.log('selectedCategories', state.selectedCategories);
-            console.log('categories', facilities.categories);
-            appState.selectedFacilitiesCategories = state.selectedCategories.filter(c => typeof c === 'string' && facilities.categories.includes(c));
-            console.log('appState.selectedCategories', appState.selectedFacilitiesCategories);
+        if (Array.isArray(state.selectedFacilitiesCategories)) {
+            appState.selectedFacilitiesCategories = state.selectedFacilitiesCategories
+                .filter(c => typeof c === 'string' && facilities.categories.includes(c));
         }
         decodeFloat(state.minPower, (val) => appState.minPower = val, 0);
         decodeFloat(state.maxPower, (val) => appState.maxPower = val, 0);
@@ -180,7 +176,8 @@ function deserializeStateFromURL() {
             appState.searchTokens = state.searchTokens.filter(t => typeof t === 'string');
         }
         if (Array.isArray(state.selectedProductionCategories)) {
-            appState.selectedProductionCategories = state.selectedProductionCategories.filter(c => typeof c === 'string');
+            appState.selectedProductionCategories = state.selectedProductionCategories
+                .filter(c => typeof c === 'string' && PRODUCTION_CATEGORIES.includes(c));
         }
         if (state.mapView && typeof state.mapView === 'object') {
             decodeFloat(state.mapView.latitude, (val) => appState.mapView.latitude = val, -90, 90);
@@ -188,12 +185,8 @@ function deserializeStateFromURL() {
             decodeFloat(state.mapView.zoom, (val) => appState.mapView.zoom = val, 0);
         }
         if (state.productionChart && typeof state.productionChart === 'object') {
-            if (state.productionChart.xmin !== undefined && state.productionChart.xmin !== null) {
-                decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val);
-            }
-            if (state.productionChart.xmax !== undefined && state.productionChart.xmax !== null) {
-                decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val);
-            }
+            decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val);
+            decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val);
         }
     } catch (error) {
         console.warn('Failed to deserialize state from URL:', error);
@@ -201,73 +194,20 @@ function deserializeStateFromURL() {
     console.log('decoded state', appState);
 }
 
-function modeFacilities() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.add('active');
-    productionBtn.classList.remove('active');
-
-    // Show facilities controls, hide production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.getElementById('annotations').style.display = 'block';
-
-    // Show appropriate view
-    document.getElementById('productionView').style.display = 'none';
-    if (appState.isTableView) {
-        document.getElementById('tableView').style.display = 'block';
-        document.getElementById('map').style.display = 'none';
-    } else {
-        document.getElementById('tableView').style.display = 'none';
-        document.getElementById('map').style.display = 'block';
-    }
-
-    // Update search box
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.value = appState.searchTokens.join(' ');
-    }
-
-    updateFacilityCategories();
-}
-
-function modeProduction() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.remove('active');
-    productionBtn.classList.add('active');
-
-    // Hide facilities controls, show production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-    if (lastUpdate) {
-        document.getElementById('annotations').style.display = 'block';
-        document.getElementById('annotations').innerHTML =
-            `Last data update: ${lastUpdate}`;
-    } else {
-        document.getElementById('annotations').style.display = 'none';
-    }
-
-    // Show production view
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('tableView').style.display = 'none';
-    document.getElementById('productionView').style.display = 'block';
-
-    // Initialize or update the chart
-    updateProductionChart();
-}
-
-
-async function loadMapTilerKey() {
-    const response = await fetch('maptiler-key.txt');
-    if (!response.ok) {
-        throw new Error(`Failed to load MapTiler key: ${response.status} ${response.statusText}`);
-    }
-    const key = await response.text();
-    return key.trim();
-}
+///////////////////////////////////////////////////////////////////////////////
+// Entry point
+///////////////////////////////////////////////////////////////////////////////
 
 async function initialize() {
+    async function loadMapTilerKey() {
+        const response = await fetch('maptiler-key.txt');
+        if (!response.ok) {
+            throw new Error(`Failed to load MapTiler key: ${response.status} ${response.statusText}`);
+        }
+        const key = await response.text();
+        return key.trim();
+    }
+
     try {
         MAPTILER_KEY = await loadMapTilerKey();
     } catch (error) {
@@ -280,10 +220,17 @@ async function initialize() {
                 <p style="font-size: 12px; color: #666; margin-top: 15px;">Contact maxp@maxp.net for help.</p>
             </div>
         `;
+        isInitializing = false;
         return;
     }
-    await loadData();
 
+    await loadData();
+    initializeDeckGL();
+    initializeUI();
+    isInitializing = false;
+}
+
+function initializeDeckGL() {
     maptilersdk.config.apiKey = MAPTILER_KEY;
     deckgl = new deck.DeckGL({
         container: 'map',
@@ -351,9 +298,80 @@ async function initialize() {
             };
         }
     });
+}
 
-    initializeUI();
-    isInitializing = false;
+async function loadData() {
+    try {
+        // Add daily timestamp to limit caching time to one day.
+        const t = new Date();
+        const ts = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+
+        // Download facilities data.
+        const facilitiesResponse = await fetch(`data/facilities.json?v=${ts}`);
+        if (!facilitiesResponse.ok) {
+            throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
+        }
+        facilities.all = await facilitiesResponse.json();
+        const numFacilitiesWithCoords = facilities.all.filter(f => f.lat && f.lon).length;
+        facilities.categories = [...new Set(facilities.all.map(f => f.SubCategory))].sort();
+
+        // Download production data.
+        const productionResponse = await fetch(`data/production.json?v=${ts}`);
+        if (!productionResponse.ok) {
+            throw new Error(`Failed to load production data: ${productionResponse.status} ${productionResponse.statusText}`);
+        }
+        productionData = await productionResponse.json();
+        productionData.map(d => {
+            const [year, month, day] = d.date.split('-').map(Number);
+            d.date = new Date(year, month - 1, day); // Parse as local time.
+        });
+
+        // Download last update time.
+        const updateResponse = await fetch(`data/last-update.txt?v=${ts}`);
+        if (updateResponse.ok) {
+            lastUpdate = await updateResponse.text();
+            if (! (lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate.trim()))) {
+                lastUpdate = null;
+            }
+        }
+
+        // Import state (if any) from URL.
+        deserializeStateFromURL();
+
+        if (appState.selectedProductionCategories === null) {
+            // Initialize with all production categories on first load (=== null)
+            appState.selectedProductionCategories = [...PRODUCTION_CATEGORIES];
+        }
+        if (appState.selectedFacilitiesCategories === null) {
+            // Initialize with all facilities categories on first load (=== null)
+            appState.selectedFacilitiesCategories = [...facilities.categories];
+        }
+
+        // Hide loading overlay after successful data load
+        document.getElementById('loadingOverlay').style.display = 'none';
+
+        console.log(`Loaded ${facilities.all.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
+        console.log(`Loaded ${productionData.length} days of production data`);
+    } catch (error) {
+        console.error('Error loading data:', error);
+
+        // Show error overlay and halt app initialization
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        loadingOverlay.innerHTML = `
+            <div class="loading-content">
+                <h3>⚠️ Error Loading Data</h3>
+                <p><strong>Failed to load energy data.</strong></p>
+                <p style="font-size: 12px; color: #666; margin-top: 15px;">
+                    ${error.message}
+                </p>
+                <p style="margin-top: 20px;">
+                    <button id="retryButton" onclick="window.location.reload()">Retry</button>
+                </p>
+            </div>
+        `;
+        loadingOverlay.style.display = 'flex';
+        return;
+    }
 }
 
 function initializeUI() {
@@ -372,7 +390,7 @@ function initializeUI() {
         });
     }
 
-    function _renderFacilityCategories() {
+    function _renderFacilitiesCategories() {
         const container = document.getElementById('categoryTableBody');
         container.innerHTML = '';
 
@@ -503,7 +521,7 @@ function initializeUI() {
         updateProductionStats(0, Infinity);
     }
 
-    function _initializeFacilitySort() {
+    function _renderTableSort() {
         sortFacilities('Municipality', 'asc');
         sortFacilities('TotalPower', 'desc');
         const powerHeader = document.querySelector('th[data-sort="TotalPower"] .sort-indicator');
@@ -512,39 +530,12 @@ function initializeUI() {
         }
     }
 
-    function _initializeInfoModal() {
-        const infoButton = document.getElementById('infoButton');
-        const infoModal = document.getElementById('infoModal');
-        const closeModal = document.getElementById('closeModal');
-
-        infoButton.addEventListener('click', () => {
-            infoModal.classList.add('show');
-        });
-
-        closeModal.addEventListener('click', () => {
-            infoModal.classList.remove('show');
-        });
-
-        // Close modal when clicking outside
-        infoModal.addEventListener('click', (e) => {
-            if (e.target === infoModal) {
-                infoModal.classList.remove('show');
-            }
-        });
-
-        // Close modal with Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
-                infoModal.classList.remove('show');
-            }
-        });
-    }
-
     _renderPowerSlider();
-    _renderFacilityCategories();
+    _renderFacilitiesCategories();
     _renderProductionCategories();
-    _initializeFacilitySort();
-    _initializeInfoModal();
+    _renderTableSort();
+
+    setupEventHandlers();
 
     if (appState.isProductionMode) {
         modeProduction();
@@ -552,156 +543,6 @@ function initializeUI() {
         modeFacilities();
         updateTableOrMap();
     }
-
-    setupEventHandlers();
-}
-
-async function loadData() {
-    try {
-        // Add daily timestamp to limit caching time to one day.
-        const t = new Date();
-        const ts = new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
-
-        // Download facilities data.
-        const facilitiesResponse = await fetch(`data/facilities.json?v=${ts}`);
-        if (!facilitiesResponse.ok) {
-            throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
-        }
-        facilities.all = await facilitiesResponse.json();
-        const numFacilitiesWithCoords = facilities.all.filter(f => f.lat && f.lon).length;
-        facilities.categories = [...new Set(facilities.all.map(f => f.SubCategory))].sort();
-
-        // Download production data.
-        const productionResponse = await fetch(`data/production.json?v=${ts}`);
-        if (!productionResponse.ok) {
-            throw new Error(`Failed to load production data: ${productionResponse.status} ${productionResponse.statusText}`);
-        }
-        productionData = await productionResponse.json();
-        productionData.map(d => {
-            const [year, month, day] = d.date.split('-').map(Number);
-            d.date = new Date(year, month - 1, day); // Parse as local time.
-        });
-
-        // Download last update time.
-        const updateResponse = await fetch(`data/last-update.txt?v=${ts}`);
-        if (updateResponse.ok) {
-            lastUpdate = await updateResponse.text();
-            if (! (lastUpdate && /^\d{4}-\d{2}-\d{2}$/.test(lastUpdate.trim()))) {
-                lastUpdate = null;
-            }
-        }
-
-        // Import state (if any) from URL.
-        deserializeStateFromURL();
-
-        if (appState.selectedProductionCategories === null) {
-            // Initialize with all production categories on first load.
-            appState.selectedProductionCategories = [...PRODUCTION_CATEGORIES];
-        }
-        if (appState.selectedFacilitiesCategories === null) {
-            // Initialize with all categories on first load.
-            appState.selectedFacilitiesCategories = [...facilities.categories];
-        }
-
-        // Hide loading overlay after successful data load
-        document.getElementById('loadingOverlay').style.display = 'none';
-
-        console.log(`Loaded ${facilities.all.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
-        console.log(`Loaded ${productionData.length} days of production data`);
-    } catch (error) {
-        console.error('Error loading data:', error);
-
-        // Show error overlay and halt app initialization
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        loadingOverlay.innerHTML = `
-            <div class="loading-content">
-                <h3>⚠️ Error Loading Data</h3>
-                <p><strong>Failed to load energy data.</strong></p>
-                <p style="font-size: 12px; color: #666; margin-top: 15px;">
-                    ${error.message}
-                </p>
-                <p style="margin-top: 20px;">
-                    <button id="retryButton" onclick="window.location.reload()">Retry</button>
-                </p>
-            </div>
-        `;
-        loadingOverlay.style.display = 'flex';
-        return;
-    }
-}
-
-function facilityMatchesSearch(f) {
-    if (appState.searchTokens.length === 0) return true;
-
-    // Fields to search: Energy Source, Power, Municipality, Canton, Date started
-    const searchableText = [
-        f.SubCategory || '',
-        (f.TotalPower || '').toString(),
-        f.BeginningOfOperation || '',
-        'city:' + (f.Municipality || ''),
-        'canton:' + (f.Canton || ''),
-        'year:' + (f.BeginningOfOperation || '').slice(0, 4),
-    ].join(' ').toLowerCase();
-
-    // All tokens must be found as substrings
-    return appState.searchTokens.every(token => searchableText.includes(token));
-}
-
-function sortFacilities(column, direction) {
-    facilities.all.sort((a, b) => {
-        let aVal, bVal;
-
-        switch (column) {
-            case 'TotalPower':
-                aVal = a.TotalPower || 0;
-                bVal = b.TotalPower || 0;
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-            case 'BeginningOfOperation':
-                aVal = new Date(a.BeginningOfOperation || '1900-01-01');
-                bVal = new Date(b.BeginningOfOperation || '1900-01-01');
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-            case 'gps':
-                aVal = (a.lat && a.lon) ? 1 : 0;
-                bVal = (b.lat && b.lon) ? 1 : 0;
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-            default: // String columns
-                aVal = (a[column] || '').toString().toLowerCase();
-                bVal = (b[column] || '').toString().toLowerCase();
-                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-        }
-    });
-}
-
-function updateTableOrMap() {
-    if (appState.isTableView) {
-        updateTable(true);
-    } else {
-        updateMap();
-    }
-}
-
-function updateProductionStats(minDate, maxDate) {
-    const totals = new Array(6).fill(0);
-    let count = 0;
-
-    productionData.forEach(record => {
-        if (record.date < minDate || record.date > maxDate) return;
-        record.prod.forEach((value, index) => {
-            totals[index] += value;
-        });
-        count++;
-    });
-
-    PRODUCTION_CATEGORIES.forEach((category, index) => {
-        const avgElement = document.getElementById(`prod-avg-${index}`);
-        if (avgElement) {
-            const avg = totals[index] / count;
-            avgElement.textContent = avg.toFixed(1);
-        }
-    });
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -709,18 +550,14 @@ function updateProductionStats(minDate, maxDate) {
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackModeFacilities() {
-    if (!appState.isProductionMode) {
-        throw new Error('callbackModeFacilities called in facilities mode');
-    }
+    if (!appState.isProductionMode) { return; }
     appState.isProductionMode = false;
     modeFacilities();
     serializeStateToURL();
 }
 
 function callbackModeProduction() {
-    if (appState.isProductionMode) {
-        throw new Error('callbackModeProduction called in production mode');
-    }
+    if (appState.isProductionMode) { return; }
     appState.isProductionMode = true;
     modeProduction();
     serializeStateToURL();
@@ -800,21 +637,18 @@ function setupEventHandlers() {
                 sortTable(column);
             });
         });
-
         document.getElementById('firstPage').addEventListener('click', () => {
             if (appState.currentPage > 1) {
                 appState.currentPage = 1;
                 updateTable();
             }
         });
-
         document.getElementById('prevPage').addEventListener('click', () => {
             if (appState.currentPage > 1) {
                 appState.currentPage--;
                 updateTable();
             }
         });
-
         document.getElementById('nextPage').addEventListener('click', () => {
             const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
             if (appState.currentPage < totalPages) {
@@ -822,7 +656,6 @@ function setupEventHandlers() {
                 updateTable();
             }
         });
-
         document.getElementById('lastPage').addEventListener('click', () => {
             const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
             if (appState.currentPage < totalPages) {
@@ -847,7 +680,9 @@ function setupEventHandlers() {
                     });
                     appState.selectedFacilitiesCategories = checked ? [...facilities.categories] : [];
                 } else {
-                    appState.selectedFacilitiesCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
+                    appState.selectedFacilitiesCategories = Array
+                        .from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked'))
+                        .map(cb => cb.value);
                     // Sync select-all checkbox
                     const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
                     allCheckbox.checked = allChecked;
@@ -870,7 +705,9 @@ function setupEventHandlers() {
                     });
                     appState.selectedProductionCategories = checked ? [...PRODUCTION_CATEGORIES] : [];
                 } else {
-                    appState.selectedProductionCategories = Array.from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked')).map(cb => cb.value);
+                    appState.selectedProductionCategories = Array
+                        .from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked'))
+                        .map(cb => cb.value);
                     // Sync select-all checkbox
                     const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
                     allCheckbox.checked = allChecked;
@@ -881,9 +718,38 @@ function setupEventHandlers() {
         });
     }
 
+    function _setupInfoModalHandlers() {
+        const infoButton = document.getElementById('infoButton');
+        const infoModal = document.getElementById('infoModal');
+        const closeModal = document.getElementById('closeModal');
+
+        infoButton.addEventListener('click', () => {
+            infoModal.classList.add('show');
+        });
+
+        closeModal.addEventListener('click', () => {
+            infoModal.classList.remove('show');
+        });
+
+        // Close modal when clicking outside
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.classList.remove('show');
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
+                infoModal.classList.remove('show');
+            }
+        });
+    }
+
     _setupTableEventHandlers();
     _setupFacilityCategorySelectorHandlers();
     _setupProductionCategorySelectorHandlers();
+    _setupInfoModalHandlers();
 
     const facilitiesBtn = document.getElementById('facilitiesMode');
     facilitiesBtn.addEventListener('click', callbackModeFacilities);
@@ -900,10 +766,143 @@ function setupEventHandlers() {
     const searchInput = document.getElementById('searchInput');
     searchInput.addEventListener('input', callbackSearchInput);
 
-
     const resetZoomBtn = document.getElementById('resetZoom');
     resetZoomBtn.addEventListener('click', callbackProductionResetZoom);
 
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Utility functions
+///////////////////////////////////////////////////////////////////////////////
+
+function facilityMatchesSearch(f) {
+    if (appState.searchTokens.length === 0) return true;
+
+    // Fields to search: Energy Source, Power, Municipality, Canton, Date started
+    const searchableText = [
+        f.SubCategory || '',
+        (f.TotalPower || '').toString(),
+        f.BeginningOfOperation || '',
+        'city:' + (f.Municipality || ''),
+        'canton:' + (f.Canton || ''),
+        'year:' + (f.BeginningOfOperation || '').slice(0, 4),
+    ].join(' ').toLowerCase();
+
+    // All tokens must be found as substrings
+    return appState.searchTokens.every(token => searchableText.includes(token));
+}
+
+function sortFacilities(column, direction) {
+    facilities.all.sort((a, b) => {
+        let aVal, bVal;
+
+        switch (column) {
+            case 'TotalPower':
+                aVal = a.TotalPower || 0;
+                bVal = b.TotalPower || 0;
+                return direction === 'asc' ? aVal - bVal : bVal - aVal;
+
+            case 'BeginningOfOperation':
+                aVal = new Date(a.BeginningOfOperation || '1900-01-01');
+                bVal = new Date(b.BeginningOfOperation || '1900-01-01');
+                return direction === 'asc' ? aVal - bVal : bVal - aVal;
+
+            case 'gps':
+                aVal = (a.lat && a.lon) ? 1 : 0;
+                bVal = (b.lat && b.lon) ? 1 : 0;
+                return direction === 'asc' ? aVal - bVal : bVal - aVal;
+
+            default: // String columns
+                aVal = (a[column] || '').toString().toLowerCase();
+                bVal = (b[column] || '').toString().toLowerCase();
+                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        }
+    });
+}
+
+function updateTableOrMap() {
+    if (appState.isTableView) {
+        updateTable(true);
+    } else {
+        updateMap();
+    }
+}
+
+function updateProductionStats(minDate, maxDate) {
+    const totals = new Array(6).fill(0);
+    let count = 0;
+
+    productionData.forEach(record => {
+        if (record.date < minDate || record.date > maxDate) return;
+        record.prod.forEach((value, index) => {
+            totals[index] += value;
+        });
+        count++;
+    });
+
+    PRODUCTION_CATEGORIES.forEach((category, index) => {
+        const avgElement = document.getElementById(`prod-avg-${index}`);
+        if (avgElement) {
+            const avg = totals[index] / count;
+            avgElement.textContent = avg.toFixed(1);
+        }
+    });
+}
+
+function modeFacilities() {
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    const productionBtn = document.getElementById('productionMode');
+    facilitiesBtn.classList.add('active');
+    productionBtn.classList.remove('active');
+
+    // Show facilities controls, hide production controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+    document.getElementById('annotations').style.display = 'block';
+
+    // Show appropriate view
+    document.getElementById('productionView').style.display = 'none';
+    if (appState.isTableView) {
+        document.getElementById('tableView').style.display = 'block';
+        document.getElementById('map').style.display = 'none';
+    } else {
+        document.getElementById('tableView').style.display = 'none';
+        document.getElementById('map').style.display = 'block';
+    }
+
+    // Update search box
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.value = appState.searchTokens.join(' ');
+    }
+
+    updateFacilityCategories();
+}
+
+function modeProduction() {
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    const productionBtn = document.getElementById('productionMode');
+    facilitiesBtn.classList.remove('active');
+    productionBtn.classList.add('active');
+
+    // Hide facilities controls, show production controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+    if (lastUpdate) {
+        document.getElementById('annotations').style.display = 'block';
+        document.getElementById('annotations').innerHTML =
+            `Last data update: ${lastUpdate}`;
+    } else {
+        document.getElementById('annotations').style.display = 'none';
+    }
+
+    // Show production view
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('productionView').style.display = 'block';
+
+    // Initialize or update the chart
+    updateProductionChart();
 }
 
 function sortTable(column) {
