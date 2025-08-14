@@ -58,12 +58,13 @@ const { Deck, ScatterplotLayer } = deck;
 let lastUpdate = null;           // Last data update date string.
 let isInitializing = true;       // Flag to prevent nouiSlider callbacks from being called during initialization
 
-let facilities = [];             // All power facilities.
-let filteredFacilities = [];     // Facilities that match the current selection (category, power range)
-let mapFacilities = [];          // Facilities that match the current selection (category, power range) and have GPS coordinates
-let categories = [];             // All categories (solar, hydro, etc.)
-
-let displayedFacilities = [];    // Currently displayed facilities in table
+let facilities = {
+    all: [],                     // All power facilities.
+    filtered: [],                // Facilities that match the current selection (category, power range)
+    onMap: [],                   // Facilities that match the current selection (category, power range) and have GPS coordinates
+    onTable: [],                 // Currently displayed facilities in table
+    categories: []               // All categories (solar, hydro, etc.)
+}
 
 // Production data state
 let productionData = [];         // Historical production data
@@ -100,7 +101,10 @@ const appState = {
     }
 };
 
-// State deserialization functions
+///////////////////////////////////////////////////////////////////////////////
+// State serialization/deserialization functions
+///////////////////////////////////////////////////////////////////////////////
+
 function decodeInt(value, setter, min = 1) {
     if (value !== undefined) {
         const num = parseInt(value);
@@ -166,8 +170,8 @@ function deserializeStateFromURL() {
         decodeInt(state.currentPage, (val) => appState.currentPage = val);
         if (Array.isArray(state.selectedCategories)) {
             console.log('selectedCategories', state.selectedCategories);
-            console.log('categories', categories);
-            appState.selectedFacilitiesCategories = state.selectedCategories.filter(c => typeof c === 'string' && categories.includes(c));
+            console.log('categories', facilities.categories);
+            appState.selectedFacilitiesCategories = state.selectedCategories.filter(c => typeof c === 'string' && facilities.categories.includes(c));
             console.log('appState.selectedCategories', appState.selectedFacilitiesCategories);
         }
         decodeFloat(state.minPower, (val) => appState.minPower = val, 0);
@@ -377,7 +381,7 @@ function initializeUI() {
         allCheckbox.type = 'checkbox';
         allCheckbox.className = 'category-checkbox';
         allCheckbox.id = 'cat-select-all';
-        allCheckbox.checked = appState.selectedFacilitiesCategories.length === categories.length;
+        allCheckbox.checked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
         const allLabel = document.createElement('label');
         allLabel.htmlFor = 'cat-select-all';
         allLabel.textContent = 'Select/Deselect All';
@@ -389,7 +393,7 @@ function initializeUI() {
         tr.appendChild(allTd);
         container.appendChild(tr);
 
-        categories.forEach(category => {
+        facilities.categories.forEach(category => {
             tr = document.createElement('tr');
 
             // Source column with checkbox and color indicator
@@ -563,9 +567,9 @@ async function loadData() {
         if (!facilitiesResponse.ok) {
             throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
         }
-        facilities = await facilitiesResponse.json();
-        const numFacilitiesWithCoords = facilities.filter(f => f.lat && f.lon).length;
-        categories = [...new Set(facilities.map(f => f.SubCategory))].sort();
+        facilities.all = await facilitiesResponse.json();
+        const numFacilitiesWithCoords = facilities.all.filter(f => f.lat && f.lon).length;
+        facilities.categories = [...new Set(facilities.all.map(f => f.SubCategory))].sort();
 
         // Download production data.
         const productionResponse = await fetch(`data/production.json?v=${ts}`);
@@ -596,13 +600,13 @@ async function loadData() {
         }
         if (appState.selectedFacilitiesCategories === null) {
             // Initialize with all categories on first load.
-            appState.selectedFacilitiesCategories = [...categories];
+            appState.selectedFacilitiesCategories = [...facilities.categories];
         }
 
         // Hide loading overlay after successful data load
         document.getElementById('loadingOverlay').style.display = 'none';
 
-        console.log(`Loaded ${facilities.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
+        console.log(`Loaded ${facilities.all.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
         console.log(`Loaded ${productionData.length} days of production data`);
     } catch (error) {
         console.error('Error loading data:', error);
@@ -644,7 +648,7 @@ function facilityMatchesSearch(f) {
 }
 
 function sortFacilities(column, direction) {
-    facilities.sort((a, b) => {
+    facilities.all.sort((a, b) => {
         let aVal, bVal;
 
         switch (column) {
@@ -812,7 +816,7 @@ function setupEventHandlers() {
         });
 
         document.getElementById('nextPage').addEventListener('click', () => {
-            const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
+            const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
             if (appState.currentPage < totalPages) {
                 appState.currentPage++;
                 updateTable();
@@ -820,7 +824,7 @@ function setupEventHandlers() {
         });
 
         document.getElementById('lastPage').addEventListener('click', () => {
-            const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
+            const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
             if (appState.currentPage < totalPages) {
                 appState.currentPage = totalPages;
                 updateTable();
@@ -841,11 +845,11 @@ function setupEventHandlers() {
                     document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
                         if (cb.id !== 'cat-select-all') cb.checked = checked;
                     });
-                    appState.selectedFacilitiesCategories = checked ? [...categories] : [];
+                    appState.selectedFacilitiesCategories = checked ? [...facilities.categories] : [];
                 } else {
                     appState.selectedFacilitiesCategories = Array.from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked')).map(cb => cb.value);
                     // Sync select-all checkbox
-                    const allChecked = appState.selectedFacilitiesCategories.length === categories.length;
+                    const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
                     allCheckbox.checked = allChecked;
                 }
                 updateTotals();
@@ -927,7 +931,7 @@ function updateTable(reset = false) {
     }
     if (reset) {
         // Use the same filtered facilities as the map (already sorted in underlying array)
-        displayedFacilities = [...filteredFacilities];
+        facilities.onTable = [...facilities.filtered];
         // Reset to first page when data changes
         appState.currentPage = 1;
     }
@@ -937,8 +941,8 @@ function updateTable(reset = false) {
 
     // Calculate pagination
     const startIndex = (appState.currentPage - 1) * TABLE_NUM_ROWS;
-    const endIndex = Math.min(startIndex + TABLE_NUM_ROWS, displayedFacilities.length);
-    const facilitiesToShow = displayedFacilities.slice(startIndex, endIndex);
+    const endIndex = Math.min(startIndex + TABLE_NUM_ROWS, facilities.onTable.length);
+    const facilitiesToShow = facilities.onTable.slice(startIndex, endIndex);
 
     facilitiesToShow.forEach(facility => {
         const row = document.createElement('tr');
@@ -1022,7 +1026,7 @@ function createPageNumberInput() {
 
 function handlePageNumberClick(e) {
     const span = e.target;
-    const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
+    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
 
     // Replace span with input
     const input = createPageNumberInput();
@@ -1056,7 +1060,7 @@ function handlePageNumberClick(e) {
 }
 
 function updatePaginationControls() {
-    const totalPages = Math.ceil(displayedFacilities.length / TABLE_NUM_ROWS);
+    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
     p = appState.currentPage;
 
     // Update page info
@@ -1072,15 +1076,15 @@ function updatePaginationControls() {
 
 function updateFacilityCategories() {
     const categoryStats = {};
-    categories.forEach(category => {
+    facilities.categories.forEach(category => {
         categoryStats[category] = { count: 0, capacity: 0 };
     });
 
     let totalCapacity = 0;
     let totalCount = 0;
-    filteredFacilities = [];
+    facilities.filtered = [];
 
-    facilities
+    facilities.all
         .filter(f => f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
         .filter(f => facilityMatchesSearch(f))
         .forEach(f => {
@@ -1094,13 +1098,13 @@ function updateFacilityCategories() {
 
             // Add to filtered facilities if category is selected
             if (appState.selectedFacilitiesCategories.includes(category)) {
-                filteredFacilities.push(f);
+                facilities.filtered.push(f);
                 totalCapacity += f.TotalPower / 1000; // Convert to MW
                 totalCount++;
             }
         });
     // Update category display elements
-    categories.forEach(category => {
+    facilities.categories.forEach(category => {
         const stats = categoryStats[category];
         const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
         const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
@@ -1114,11 +1118,11 @@ function updateFacilityCategories() {
 }
 
 function updateTotals() {
-    filteredFacilities = facilities
+    facilities.filtered = facilities.all
         .filter(f => appState.selectedFacilitiesCategories.includes(f.SubCategory) && f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
         .filter(f => facilityMatchesSearch(f));
-    const totalCount = filteredFacilities.length;
-    const totalCapacity = filteredFacilities.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
+    const totalCount = facilities.filtered.length;
+    const totalCapacity = facilities.filtered.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
 
     document.getElementById('totalCount').textContent = totalCount.toLocaleString();
     document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
@@ -1128,10 +1132,10 @@ function updateMap() {
     if (appState.isTableView) {
         throw new Error('updateMap called in table view');
     }
-    mapFacilities = filteredFacilities.filter(f => f.lat && f.lon)
+    facilities.onMap = facilities.filtered.filter(f => f.lat && f.lon)
     const scatterplotLayer = new ScatterplotLayer({
         id: 'facilities',
-        data: mapFacilities,
+        data: facilities.onMap,
         getPosition: d => [d.lon, d.lat],
         getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
         getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
@@ -1150,9 +1154,9 @@ function updateMap() {
 
     console.log('lastUpdate', lastUpdate);
     document.getElementById('annotations').innerHTML =
-        `${filteredFacilities.length.toLocaleString()} facilities match filters.<br/>Map shows ${mapFacilities.length.toLocaleString()} facilities.` +
+        `${facilities.filtered.length.toLocaleString()} facilities match filters.<br/>Map shows ${facilities.onMap.length.toLocaleString()} facilities.` +
         `<span class="info-asterisk">*` +
-        `<span class="tooltip">${(filteredFacilities.length - mapFacilities.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
+        `<span class="tooltip">${(facilities.filtered.length - facilities.onMap.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
         `</span>` +
         (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
 
