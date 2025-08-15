@@ -61,10 +61,9 @@ let isInitializing = true;       // Flag to prevent nouiSlider callbacks from be
 let facilities = {
     all: [],                     // All power facilities.
     filtered: [],                // Facilities that match the current selection (category, power range)
-    onTable: [],                 // Currently displayed facilities in table
     categories: [],              // All categories (solar, hydro, etc.)
-    categoryStats: {}            // Category statistics
-}
+    categoryStats: {}            // Category statistics (count and totals by category)
+};
 
 // Production data state
 let productionData = [];         // Historical production data
@@ -630,7 +629,6 @@ function callbackFacilityViewToggle() {
 }
 
 function renderFacilities() {
-    console.log('renderFacilities', appState.isTableView);
     if (appState.isTableView) {
         renderTable(true);
     } else {
@@ -723,7 +721,7 @@ function setupEventHandlers() {
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackPageNumber(e) {
-    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+    const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
 
     function createPageNumberSpan() {
         const span = document.createElement('span');
@@ -793,14 +791,14 @@ function setupTableEventHandlers() {
         }
     });
     document.getElementById('nextPage').addEventListener('click', () => {
-        const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+        const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
         if (appState.currentPage < totalPages) {
             appState.currentPage++;
             renderTable();
         }
     });
     document.getElementById('lastPage').addEventListener('click', () => {
-        const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+        const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
         if (appState.currentPage < totalPages) {
             appState.currentPage = totalPages;
             renderTable();
@@ -874,8 +872,6 @@ function renderTable(reset = false) {
         throw new Error('updateTable called in map view');
     }
     if (reset) {
-        // Use the same filtered facilities as the map (already sorted in underlying array)
-        facilities.onTable = [...facilities.filtered];
         // Reset to first page when data changes
         appState.currentPage = 1;
     }
@@ -896,8 +892,8 @@ function renderTable(reset = false) {
 
     // Calculate pagination
     const startIndex = (p - 1) * TABLE_NUM_ROWS;
-    const endIndex = Math.min(startIndex + TABLE_NUM_ROWS, facilities.onTable.length);
-    const facilitiesToShow = facilities.onTable.slice(startIndex, endIndex);
+    const endIndex = Math.min(startIndex + TABLE_NUM_ROWS, facilities.filtered.length);
+    const facilitiesToShow = facilities.filtered.slice(startIndex, endIndex);
 
     facilitiesToShow.forEach(facility => {
         const row = document.createElement('tr');
@@ -951,7 +947,7 @@ function renderTable(reset = false) {
     });
 
     // Update pagination controls
-    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+    const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
     document.getElementById('currentPageNumber').textContent = p;
     document.getElementById('totalPages').textContent = totalPages;
     document.getElementById('firstPage').disabled = p <= 1;
