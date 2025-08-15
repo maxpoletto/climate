@@ -389,7 +389,7 @@ function initializeUI() {
         });
     }
 
-    function _renderFacilitiesCategories() {
+    function _renderFacilitiesCheckboxes() {
         const container = document.getElementById('categoryTableBody');
         container.innerHTML = '';
 
@@ -457,7 +457,7 @@ function initializeUI() {
         });
     }
 
-    function _renderProductionCategories() {
+    function _renderProductionCheckboxes() {
         const container = document.getElementById('productionCategoryTableBody');
         container.innerHTML = '';
 
@@ -521,8 +521,8 @@ function initializeUI() {
     }
 
     _renderPowerSlider();
-    _renderFacilitiesCategories();
-    _renderProductionCategories();
+    _renderFacilitiesCheckboxes();
+    _renderProductionCheckboxes();
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
     setupEventHandlers();
 
@@ -534,7 +534,7 @@ function initializeUI() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Event handlers
+// Mode switching
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackModeFacilities() {
@@ -550,6 +550,62 @@ function callbackModeProduction() {
     modeProduction();
     serializeStateToURL();
 }
+
+function modeFacilities() {
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    const productionBtn = document.getElementById('productionMode');
+    facilitiesBtn.classList.add('active');
+    productionBtn.classList.remove('active');
+
+    // Show facilities controls, hide production controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+    document.getElementById('annotations').style.display = 'block';
+
+    // Show appropriate view
+    document.getElementById('productionView').style.display = 'none';
+    document.getElementById('tableView').style.display = appState.isTableView ? 'block' : 'none';
+    document.getElementById('map').style.display = appState.isTableView ? 'none' : 'block';
+
+    // Update search box
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.value = appState.searchTokens.join(' ');
+    }
+
+    filterFacilities();
+    renderFacilities();
+}
+
+function modeProduction() {
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    const productionBtn = document.getElementById('productionMode');
+    facilitiesBtn.classList.remove('active');
+    productionBtn.classList.add('active');
+
+    // Hide facilities controls, show production controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+    if (lastUpdate) {
+        document.getElementById('annotations').style.display = 'block';
+        document.getElementById('annotations').innerHTML =
+            `Last data update: ${lastUpdate}`;
+    } else {
+        document.getElementById('annotations').style.display = 'none';
+    }
+
+    // Show production view
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('productionView').style.display = 'block';
+
+    // Initialize or update the chart
+    updateProductionChart();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Facilities mode view switching
+///////////////////////////////////////////////////////////////////////////////
 
 function callbackFacilityViewToggle() {
     if (appState.isProductionMode) {
@@ -570,12 +626,16 @@ function callbackFacilityViewToggle() {
         tableContainer.style.display = 'none';
         toggleButton.textContent = '📊 Table View';
     }
-    renderTableOrMap();
+    renderFacilities();
 }
 
-function callbackProductionResetZoom() {
-    if (!productionChart) return;
-    productionChart.resetZoom();
+function renderFacilities() {
+    console.log('renderFacilities', appState.isTableView);
+    if (appState.isTableView) {
+        renderTable(true);
+    } else {
+        renderMap();
+    }
 }
 
 function setupEventHandlers() {
@@ -659,7 +719,7 @@ function setupEventHandlers() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Table view
+// Facilities mode, table view
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackPageNumber(e) {
@@ -797,6 +857,18 @@ function sortTable(column) {
     renderTable(true);
 }
 
+function renderFacilitiesCategories() {
+    facilities.categories.forEach(category => {
+        const stats = facilities.categoryStats[category];
+        const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
+        const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
+        if (countElement) countElement.textContent = stats.count.toLocaleString();
+        if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
+    });
+    document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
+    document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
+}
+
 function renderTable(reset = false) {
     if (!appState.isTableView) {
         throw new Error('updateTable called in map view');
@@ -893,7 +965,48 @@ function renderTable(reset = false) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Search and filters
+// Facilities mode, map view
+///////////////////////////////////////////////////////////////////////////////
+
+function renderMap() {
+    if (appState.isTableView) {
+        throw new Error('updateMap called in table view');
+    }
+    renderFacilitiesCategories();
+
+    const onMap = facilities.filtered.filter(f => f.lat && f.lon)
+    const scatterplotLayer = new ScatterplotLayer({
+        id: 'facilities',
+        data: onMap,
+        getPosition: d => [d.lon, d.lat],
+        getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
+        getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
+        radiusUnits: 'meters',
+        opacity: 0.4,
+        pickable: true,
+        radiusMinPixels: 2,
+        radiusMaxPixels: 100,
+        updateTriggers: {
+            getFillColor: appState.selectedFacilitiesCategories,
+            getRadius: [appState.minPower, appState.maxPower]
+        }
+    });
+
+    deckgl.setProps({ layers: [scatterplotLayer] });
+
+    console.log('lastUpdate', lastUpdate);
+    document.getElementById('annotations').innerHTML =
+        `${facilities.filtered.length.toLocaleString()} facilities match filters.<br/>Map shows ${onMap.length.toLocaleString()} facilities.` +
+        `<span class="info-asterisk">*` +
+        `<span class="tooltip">${(facilities.filtered.length - onMap.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
+        `</span>` +
+        (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
+
+    serializeStateToURL();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Facilities mode, search and filters
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackFacilitiesCategories(e) {
@@ -915,7 +1028,7 @@ function callbackFacilitiesCategories(e) {
         allCheckbox.checked = allChecked;
     }
     filterFacilities();
-    renderTableOrMap();
+    renderFacilities();
 }
 
 let searchTimeout = null;
@@ -928,7 +1041,7 @@ function callbackSearchInput(e) {
     searchTimeout = setTimeout(() => {
         appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
         filterFacilities();
-        renderTableOrMap();
+        renderFacilities();
     }, DEBOUNCE_MS);
 }
 
@@ -952,7 +1065,7 @@ function callbackPowerSlider(values, handle) {
     if (isInitializing) {
         return;
     }
-    renderTableOrMap();
+    renderFacilities();
 }
 
 function facilityMatchesSearch(f) {
@@ -1000,122 +1113,14 @@ function filterFacilities() {
     facilities.categoryStats['Total'] = { count: totalCount, capacity: totalCapacity };
 }
 
-function renderTableOrMap() {
-    if (appState.isTableView) {
-        renderTable(true);
-    } else {
-        renderMap();
-    }
-}
-
-function modeFacilities() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.add('active');
-    productionBtn.classList.remove('active');
-
-    // Show facilities controls, hide production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.getElementById('annotations').style.display = 'block';
-
-    // Show appropriate view
-    document.getElementById('productionView').style.display = 'none';
-    document.getElementById('tableView').style.display = appState.isTableView ? 'block' : 'none';
-    document.getElementById('map').style.display = appState.isTableView ? 'none' : 'block';
-
-    // Update search box
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.value = appState.searchTokens.join(' ');
-    }
-
-    filterFacilities();
-    renderTableOrMap();
-}
-
-function modeProduction() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.remove('active');
-    productionBtn.classList.add('active');
-
-    // Hide facilities controls, show production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-    if (lastUpdate) {
-        document.getElementById('annotations').style.display = 'block';
-        document.getElementById('annotations').innerHTML =
-            `Last data update: ${lastUpdate}`;
-    } else {
-        document.getElementById('annotations').style.display = 'none';
-    }
-
-    // Show production view
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('tableView').style.display = 'none';
-    document.getElementById('productionView').style.display = 'block';
-
-    // Initialize or update the chart
-    updateProductionChart();
-}
-
-function renderFacilitiesCategories() {
-    facilities.categories.forEach(category => {
-        const stats = facilities.categoryStats[category];
-        const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
-        const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
-        if (countElement) countElement.textContent = stats.count.toLocaleString();
-        if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
-    });
-    document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
-    document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Facilities mode, map view
-///////////////////////////////////////////////////////////////////////////////
-
-function renderMap() {
-    if (appState.isTableView) {
-        throw new Error('updateMap called in table view');
-    }
-    renderFacilitiesCategories();
-
-    const onMap = facilities.filtered.filter(f => f.lat && f.lon)
-    const scatterplotLayer = new ScatterplotLayer({
-        id: 'facilities',
-        data: onMap,
-        getPosition: d => [d.lon, d.lat],
-        getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
-        getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
-        radiusUnits: 'meters',
-        opacity: 0.4,
-        pickable: true,
-        radiusMinPixels: 2,
-        radiusMaxPixels: 100,
-        updateTriggers: {
-            getFillColor: appState.selectedFacilitiesCategories,
-            getRadius: [appState.minPower, appState.maxPower]
-        }
-    });
-
-    deckgl.setProps({ layers: [scatterplotLayer] });
-
-    console.log('lastUpdate', lastUpdate);
-    document.getElementById('annotations').innerHTML =
-        `${facilities.filtered.length.toLocaleString()} facilities match filters.<br/>Map shows ${onMap.length.toLocaleString()} facilities.` +
-        `<span class="info-asterisk">*` +
-        `<span class="tooltip">${(facilities.filtered.length - onMap.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
-        `</span>` +
-        (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
-
-    serializeStateToURL();
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // Production mode
 ///////////////////////////////////////////////////////////////////////////////
+
+function callbackProductionResetZoom() {
+    if (!productionChart) return;
+    productionChart.resetZoom();
+}
 
 function createProductionChart() {
     const ctx = document.getElementById('productionChart').getContext('2d');
