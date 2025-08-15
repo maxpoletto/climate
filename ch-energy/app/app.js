@@ -628,9 +628,10 @@ function callbackFacilityViewToggle() {
     renderFacilities();
 }
 
-function renderFacilities() {
+function renderFacilities(reset = false) {
+    renderFacilitiesCategories();
     if (appState.isTableView) {
-        renderTable();
+        renderTable(reset);
     } else {
         renderMap();
     }
@@ -846,13 +847,9 @@ function sortTable(column) {
         appState.currentSort.column = column;
         appState.currentSort.sortAscending = true;
     }
-    console.log('sortTable', column, appState.currentSort.sortAscending);
-
-    // Sort the underlying facilities array
     sortFacilities(column, appState.currentSort.sortAscending);
-    console.log('sortTable', facilities.all[0]);
     filterFacilities();
-    renderTable(true);
+    renderTable();
 }
 
 function renderFacilitiesCategories() {
@@ -872,7 +869,6 @@ function renderTable(reset = false) {
         throw new Error('updateTable called in map view');
     }
     if (reset) {
-        // Reset to first page when data changes
         appState.currentPage = 1;
     }
     const p = appState.currentPage;
@@ -955,8 +951,6 @@ function renderTable(reset = false) {
     document.getElementById('nextPage').disabled = p >= totalPages;
     document.getElementById('lastPage').disabled = p >= totalPages;
 
-    renderFacilitiesCategories();
-
     serializeStateToURL();
 }
 
@@ -968,7 +962,6 @@ function renderMap() {
     if (appState.isTableView) {
         throw new Error('updateMap called in table view');
     }
-    renderFacilitiesCategories();
 
     const onMap = facilities.filtered.filter(f => f.lat && f.lon)
     const scatterplotLayer = new ScatterplotLayer({
@@ -1024,7 +1017,7 @@ function callbackFacilitiesCategories(e) {
         allCheckbox.checked = allChecked;
     }
     filterFacilities();
-    renderFacilities();
+    renderFacilities(true);
 }
 
 let searchTimeout = null;
@@ -1037,7 +1030,7 @@ function callbackSearchInput(e) {
     searchTimeout = setTimeout(() => {
         appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
         filterFacilities();
-        renderFacilities();
+        renderFacilities(true);
     }, DEBOUNCE_MS);
 }
 
@@ -1061,7 +1054,7 @@ function callbackPowerSlider(values, handle) {
     if (isInitializing) {
         return;
     }
-    renderFacilities();
+    renderFacilities(true);
 }
 
 function facilityMatchesSearch(f) {
