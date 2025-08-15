@@ -476,6 +476,22 @@ body {
     cursor: not-allowed;
 }
 
+#currentPageNumber {
+    cursor: pointer;
+    text-decoration: underline;
+
+    color: #2196F3;
+}
+
+#pageNumberInput {
+    width: 50px;
+    text-align: center;
+    border: 1px solid #2196F3;
+    border-radius: 3px;
+    padding: 2px;
+    font-size: 12px;
+}
+
 #pageInfo {
     font-size: 12px;
     color: #666;

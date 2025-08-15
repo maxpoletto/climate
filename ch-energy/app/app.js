@@ -77,7 +77,7 @@ const appState = {
 
     // Facilities mode state
     isTableView: false,
-    currentSort: { column: 'TotalPower', direction: 'desc' },
+    currentSort: { column: 'TotalPower', sortAscending: false },
     currentPage: 1,
     minPower: 0.1,
     maxPower: 2000000,
@@ -148,21 +148,20 @@ function deserializeStateFromURL() {
 
     try {
         const state = JSON.parse(atob(encodedState));
-
+        if (!state || typeof state !== 'object') {
+            console.warn('Invalid state');
+            return;
+        }
         if (state.isProductionMode !== undefined) {
-            appState.isProductionMode = Boolean(state.isProductionMode);
+            appState.isProductionMode = state.isProductionMode;
         }
         if (state.isTableView !== undefined) {
-            appState.isTableView = Boolean(state.isTableView);
+            appState.isTableView = state.isTableView;
         }
         if (state.currentSort && typeof state.currentSort === 'object') {
-            if (state.currentSort.column && state.currentSort.direction
-                && TABLE_COLUMNS.includes(state.currentSort.column)
-                && (state.currentSort.direction === 'asc' || state.currentSort.direction === 'desc')) {
-                appState.currentSort = {
-                    column: String(state.currentSort.column),
-                    direction: String(state.currentSort.direction)
-                };
+            if (state.currentSort.column && TABLE_COLUMNS.includes(state.currentSort.column)) {
+                appState.currentSort.column = state.currentSort.column;
+                appState.currentSort.sortAscending = state.currentSort.sortAscending;
             }
         }
         decodeInt(state.currentPage, (val) => appState.currentPage = val);
@@ -521,19 +520,10 @@ function initializeUI() {
         updateProductionStats(0, Infinity);
     }
 
-    function _renderTableSort() {
-        sortFacilities('Municipality', 'asc');
-        sortFacilities('TotalPower', 'desc');
-        const powerHeader = document.querySelector('th[data-sort="TotalPower"] .sort-indicator');
-        if (powerHeader) {
-            powerHeader.className = 'sort-indicator desc';
-        }
-    }
-
     _renderPowerSlider();
     _renderFacilitiesCategories();
     _renderProductionCategories();
-    _renderTableSort();
+    sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
 
     setupEventHandlers();
 
@@ -541,7 +531,6 @@ function initializeUI() {
         modeProduction();
     } else {
         modeFacilities();
-        updateTableOrMap();
     }
 }
 
@@ -629,45 +618,6 @@ function callbackProductionResetZoom() {
 
 function setupEventHandlers() {
 
-    function _setupTableEventHandlers() {
-        const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
-        tableHeaders.forEach(header => {
-            header.addEventListener('click', () => {
-                const column = header.dataset.sort;
-                sortTable(column);
-            });
-        });
-        document.getElementById('firstPage').addEventListener('click', () => {
-            if (appState.currentPage > 1) {
-                appState.currentPage = 1;
-                updateTable();
-            }
-        });
-        document.getElementById('prevPage').addEventListener('click', () => {
-            if (appState.currentPage > 1) {
-                appState.currentPage--;
-                updateTable();
-            }
-        });
-        document.getElementById('nextPage').addEventListener('click', () => {
-            const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
-            if (appState.currentPage < totalPages) {
-                appState.currentPage++;
-                updateTable();
-            }
-        });
-        document.getElementById('lastPage').addEventListener('click', () => {
-            const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
-            if (appState.currentPage < totalPages) {
-                appState.currentPage = totalPages;
-                updateTable();
-            }
-        });
-
-        // Page number click => inline input
-        document.getElementById('currentPageNumber').addEventListener('click', handlePageNumberClick);
-    }
-
     function _setupFacilityCategorySelectorHandlers() {
         const allCheckbox = document.getElementById('cat-select-all');
         document.getElementById('categoryTableBody').addEventListener('change', function (e) {
@@ -746,7 +696,7 @@ function setupEventHandlers() {
         });
     }
 
-    _setupTableEventHandlers();
+    setupTableEventHandlers();
     _setupFacilityCategorySelectorHandlers();
     _setupProductionCategorySelectorHandlers();
     _setupInfoModalHandlers();
@@ -772,138 +722,145 @@ function setupEventHandlers() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Utility functions
+// Table view
 ///////////////////////////////////////////////////////////////////////////////
 
-function facilityMatchesSearch(f) {
-    if (appState.searchTokens.length === 0) return true;
+function pageNumberCallback(e) {
+    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
 
-    // Fields to search: Energy Source, Power, Municipality, Canton, Date started
-    const searchableText = [
-        f.SubCategory || '',
-        (f.TotalPower || '').toString(),
-        f.BeginningOfOperation || '',
-        'city:' + (f.Municipality || ''),
-        'canton:' + (f.Canton || ''),
-        'year:' + (f.BeginningOfOperation || '').slice(0, 4),
-    ].join(' ').toLowerCase();
+    function createPageNumberSpan() {
+        const span = document.createElement('span');
+        span.id = 'currentPageNumber';
+        span.textContent = appState.currentPage.toString();
+        span.addEventListener('click', pageNumberCallback);
+        return span;
+    }
+    function createPageNumberInput() {
+        const input = document.createElement('input');
+        input.id = 'pageNumberInput';
+        input.type = 'number';
+        input.min = '1';
+        input.max = totalPages.toString();
+        input.value = appState.currentPage.toString();
+        return input;
+    }
+    function inputBlur() {
+        const pageNumber = parseInt(input.value);
+        if (pageNumber >= 1 && pageNumber <= totalPages) {
+            appState.currentPage = pageNumber;
+        }
+        // Restore span with current page number
+        const newSpan = createPageNumberSpan();
+        input.parentNode.replaceChild(newSpan, input);
+        if (pageNumber >= 1 && pageNumber <= totalPages) {
+            renderTable();
+        }
+    }
+    function inputKeyDown(e) {
+        if (e.key === 'Enter') {
+            inputBlur();
+        } else if (e.key === 'Escape') {
+            // Cancel edit - restore span without changing page
+            const newSpan = createPageNumberSpan();
+            input.parentNode.replaceChild(newSpan, input);
+        }
+    }
 
-    // All tokens must be found as substrings
-    return appState.searchTokens.every(token => searchableText.includes(token));
+    // Replace span with input
+    const input = createPageNumberInput();
+    e.target.parentNode.replaceChild(input, e.target);
+    input.focus();
+    input.select();
+    input.addEventListener('blur', inputBlur);
+    input.addEventListener('keydown', inputKeyDown);
 }
 
-function sortFacilities(column, direction) {
-    facilities.all.sort((a, b) => {
-        let aVal, bVal;
-
-        switch (column) {
-            case 'TotalPower':
-                aVal = a.TotalPower || 0;
-                bVal = b.TotalPower || 0;
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-            case 'BeginningOfOperation':
-                aVal = new Date(a.BeginningOfOperation || '1900-01-01');
-                bVal = new Date(b.BeginningOfOperation || '1900-01-01');
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-            case 'gps':
-                aVal = (a.lat && a.lon) ? 1 : 0;
-                bVal = (b.lat && b.lon) ? 1 : 0;
-                return direction === 'asc' ? aVal - bVal : bVal - aVal;
-
-            default: // String columns
-                aVal = (a[column] || '').toString().toLowerCase();
-                bVal = (b[column] || '').toString().toLowerCase();
-                return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+function setupTableEventHandlers() {
+    const tableHeaders = document.querySelectorAll('#facilitiesTable th.sortable');
+    tableHeaders.forEach(header => {
+        header.addEventListener('click', () => {
+            const column = header.dataset.sort;
+            sortTable(column);
+        });
+    });
+    document.getElementById('firstPage').addEventListener('click', () => {
+        if (appState.currentPage > 1) {
+            appState.currentPage = 1;
+            renderTable();
         }
     });
+    document.getElementById('prevPage').addEventListener('click', () => {
+        if (appState.currentPage > 1) {
+            appState.currentPage--;
+            renderTable();
+        }
+    });
+    document.getElementById('nextPage').addEventListener('click', () => {
+        const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+        if (appState.currentPage < totalPages) {
+            appState.currentPage++;
+            renderTable();
+        }
+    });
+    document.getElementById('lastPage').addEventListener('click', () => {
+        const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+        if (appState.currentPage < totalPages) {
+            appState.currentPage = totalPages;
+            renderTable();
+        }
+    });
+
+    // Page number click => inline input
+    document.getElementById('currentPageNumber').addEventListener('click', pageNumberCallback);
 }
 
-function updateTableOrMap() {
-    if (appState.isTableView) {
-        updateTable(true);
-    } else {
-        updateMap();
+function sortFacilities(column, sortAscending) {
+    switch (column) {
+        case 'TotalPower':
+            facilities.all.sort((a, b) =>
+                {
+                    v = (a.TotalPower || 0) - (b.TotalPower || 0); return sortAscending ? v : -v;
+                });
+            break;
+        case 'BeginningOfOperation':
+            facilities.all.sort((a, b) =>
+                {
+                    v = new Date(a.BeginningOfOperation || '1800-01-01') - new Date(b.BeginningOfOperation || '1800-01-01');
+                    return sortAscending ? v : -v;
+                });
+            break;
+        case 'gps':
+            facilities.all.sort((a, b) => {
+                v = (a.lat && a.lon) - (b.lat && b.lon);
+                return sortAscending ? v : -v;
+            });
+            break;
+        default:
+            facilities.all.sort((a, b) => {
+                v = (a[column] || '').toString().toLowerCase().localeCompare((b[column] || '').toString().toLowerCase());
+                return sortAscending ? v : -v;
+            });
+            break;
     }
-}
-
-function modeFacilities() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.add('active');
-    productionBtn.classList.remove('active');
-
-    // Show facilities controls, hide production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.getElementById('annotations').style.display = 'block';
-
-    // Show appropriate view
-    document.getElementById('productionView').style.display = 'none';
-    if (appState.isTableView) {
-        document.getElementById('tableView').style.display = 'block';
-        document.getElementById('map').style.display = 'none';
-    } else {
-        document.getElementById('tableView').style.display = 'none';
-        document.getElementById('map').style.display = 'block';
-    }
-
-    // Update search box
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.value = appState.searchTokens.join(' ');
-    }
-
-    updateFacilityCategories();
-}
-
-function modeProduction() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.remove('active');
-    productionBtn.classList.add('active');
-
-    // Hide facilities controls, show production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-    if (lastUpdate) {
-        document.getElementById('annotations').style.display = 'block';
-        document.getElementById('annotations').innerHTML =
-            `Last data update: ${lastUpdate}`;
-    } else {
-        document.getElementById('annotations').style.display = 'none';
-    }
-
-    // Show production view
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('tableView').style.display = 'none';
-    document.getElementById('productionView').style.display = 'block';
-
-    // Initialize or update the chart
-    updateProductionChart();
 }
 
 function sortTable(column) {
-    const direction = (appState.currentSort.column === column && appState.currentSort.direction === 'asc') ? 'desc' : 'asc';
-    appState.currentSort = { column, direction };
-
-    // Clear all sort indicators and set the new one
-    document.querySelectorAll('.sort-indicator').forEach(indicator => {
-        indicator.className = 'sort-indicator';
-    });
-    const currentHeader = document.querySelector(`th[data-sort="${column}"] .sort-indicator`);
-    currentHeader.className = `sort-indicator ${direction}`;
+    if (appState.currentSort.column === column) {
+        appState.currentSort.sortAscending = !appState.currentSort.sortAscending;
+    } else {
+        appState.currentSort.column = column;
+        appState.currentSort.sortAscending = true;
+    }
+    console.log('sortTable', column, appState.currentSort.sortAscending);
 
     // Sort the underlying facilities array
-    sortFacilities(column, direction);
-
-    // Re-filter and update display with the newly sorted data
+    sortFacilities(column, appState.currentSort.sortAscending);
+    console.log('sortTable', facilities.all[0]);
     updateFacilityCategories();
-    updateTableOrMap();
+    renderTable(true);
 }
 
-function updateTable(reset = false) {
+function renderTable(reset = false) {
     if (!appState.isTableView) {
         throw new Error('updateTable called in map view');
     }
@@ -913,12 +870,23 @@ function updateTable(reset = false) {
         // Reset to first page when data changes
         appState.currentPage = 1;
     }
+    const p = appState.currentPage;
+
+    // Render table header.
+
+    // Clear all sort indicators and set the new one
+    const thead = document.getElementById('facilitiesTableHead');
+    thead.querySelectorAll('.sort-indicator').forEach(indicator => { indicator.className = 'sort-indicator'; });
+    const currentHeader = thead.querySelector(`th[data-sort="${appState.currentSort.column}"] .sort-indicator`);
+    currentHeader.className = `sort-indicator ${appState.currentSort.sortAscending ? 'asc' : 'desc'}`;
+
+    // Render table body.
 
     const tbody = document.getElementById('facilitiesTableBody');
     tbody.innerHTML = '';
 
     // Calculate pagination
-    const startIndex = (appState.currentPage - 1) * TABLE_NUM_ROWS;
+    const startIndex = (p - 1) * TABLE_NUM_ROWS;
     const endIndex = Math.min(startIndex + TABLE_NUM_ROWS, facilities.onTable.length);
     const facilitiesToShow = facilities.onTable.slice(startIndex, endIndex);
 
@@ -972,84 +940,98 @@ function updateTable(reset = false) {
         row.appendChild(gpsCell);
         tbody.appendChild(row);
     });
-    updatePaginationControls();
+
+    // Update pagination controls
+    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+    document.getElementById('currentPageNumber').textContent = p;
+    document.getElementById('totalPages').textContent = totalPages;
+    document.getElementById('firstPage').disabled = p <= 1;
+    document.getElementById('prevPage').disabled = p <= 1;
+    document.getElementById('nextPage').disabled = p >= totalPages;
+    document.getElementById('lastPage').disabled = p >= totalPages;
+
     serializeStateToURL();
 }
 
-function createPageNumberSpan() {
-    const span = document.createElement('span');
-    span.id = 'currentPageNumber';
-    span.style.cursor = 'pointer';
-    span.style.textDecoration = 'underline';
-    span.style.color = '#2196F3';
-    span.textContent = appState.currentPage.toString();
-    span.addEventListener('click', handlePageNumberClick);
-    return span;
+///////////////////////////////////////////////////////////////////////////////
+// Utility functions
+///////////////////////////////////////////////////////////////////////////////
+
+function facilityMatchesSearch(f) {
+    if (appState.searchTokens.length === 0) return true;
+
+    // Fields to search: Energy Source, Power, Municipality, Canton, Date started
+    const searchableText = [
+        f.SubCategory || '',
+        (f.TotalPower || '').toString(),
+        f.BeginningOfOperation || '',
+        'city:' + (f.Municipality || ''),
+        'canton:' + (f.Canton || ''),
+        'year:' + (f.BeginningOfOperation || '').slice(0, 4),
+    ].join(' ').toLowerCase();
+
+    // All tokens must be found as substrings
+    return appState.searchTokens.every(token => searchableText.includes(token));
 }
 
-function createPageNumberInput() {
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '1';
-    input.max = totalPages.toString();
-    input.value = appState.currentPage.toString();
-    input.style.width = '50px';
-    input.style.textAlign = 'center';
-    input.style.border = '1px solid #2196F3';
-    input.style.borderRadius = '3px';
-    input.style.padding = '2px';
-    input.style.fontSize = '12px';
-    return input;
+function updateTableOrMap() {
+    if (appState.isTableView) {
+        renderTable(true);
+    } else {
+        updateMap();
+    }
 }
 
-function handlePageNumberClick(e) {
-    const span = e.target;
-    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
+function modeFacilities() {
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    const productionBtn = document.getElementById('productionMode');
+    facilitiesBtn.classList.add('active');
+    productionBtn.classList.remove('active');
 
-    // Replace span with input
-    const input = createPageNumberInput();
-    span.parentNode.replaceChild(input, span);
-    input.focus();
-    input.select();
+    // Show facilities controls, hide production controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+    document.getElementById('annotations').style.display = 'block';
 
-    const finishEdit = () => {
-        const pageNumber = parseInt(input.value);
-        if (pageNumber >= 1 && pageNumber <= totalPages) {
-            appState.currentPage = pageNumber;
-        }
-        // Restore span with current page number
-        const newSpan = createPageNumberSpan();
-        input.parentNode.replaceChild(newSpan, input);
-        if (pageNumber >= 1 && pageNumber <= totalPages) {
-            updateTable();
-        }
-    };
+    // Show appropriate view
+    document.getElementById('productionView').style.display = 'none';
+    document.getElementById('tableView').style.display = appState.isTableView ? 'block' : 'none';
+    document.getElementById('map').style.display = appState.isTableView ? 'none' : 'block';
 
-    input.addEventListener('blur', finishEdit);
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            input.blur();
-        } else if (e.key === 'Escape') {
-            // Cancel edit - restore span without changing page
-            const newSpan = createPageNumberSpan();
-            input.parentNode.replaceChild(newSpan, input);
-        }
-    });
+    // Update search box
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.value = appState.searchTokens.join(' ');
+    }
+
+    updateFacilityCategories();
+    updateTableOrMap();
 }
 
-function updatePaginationControls() {
-    const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
-    p = appState.currentPage;
+function modeProduction() {
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    const productionBtn = document.getElementById('productionMode');
+    facilitiesBtn.classList.remove('active');
+    productionBtn.classList.add('active');
 
-    // Update page info
-    document.getElementById('currentPageNumber').textContent = p;
-    document.getElementById('totalPages').textContent = totalPages;
+    // Hide facilities controls, show production controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+    if (lastUpdate) {
+        document.getElementById('annotations').style.display = 'block';
+        document.getElementById('annotations').innerHTML =
+            `Last data update: ${lastUpdate}`;
+    } else {
+        document.getElementById('annotations').style.display = 'none';
+    }
 
-    // Update button states
-    document.getElementById('firstPage').disabled = appState.currentPage <= 1;
-    document.getElementById('prevPage').disabled = appState.currentPage <= 1;
-    document.getElementById('nextPage').disabled = appState.currentPage >= totalPages;
-    document.getElementById('lastPage').disabled = appState.currentPage >= totalPages;
+    // Show production view
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('productionView').style.display = 'block';
+
+    // Initialize or update the chart
+    updateProductionChart();
 }
 
 function updateFacilityCategories() {
