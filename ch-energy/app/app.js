@@ -45,7 +45,7 @@ const PRODUCTION_CATEGORIES = [
 
 const TABLE_COLUMNS = ["SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps"];
 const TABLE_NUM_ROWS = 50;       // Show 50 facilities per page
-const DEBOUNCE_MS = 300;         // 300ms delay to debounce expensive UI interactions.
+const DEBOUNCE_MS = 100;         // 300ms delay to debounce expensive UI interactions.
 
 ///////////////////////////////////////////////////////////////////////////////
 // Global state
@@ -61,9 +61,9 @@ let isInitializing = true;       // Flag to prevent nouiSlider callbacks from be
 let facilities = {
     all: [],                     // All power facilities.
     filtered: [],                // Facilities that match the current selection (category, power range)
-    onMap: [],                   // Facilities that match the current selection (category, power range) and have GPS coordinates
     onTable: [],                 // Currently displayed facilities in table
-    categories: []               // All categories (solar, hydro, etc.)
+    categories: [],              // All categories (solar, hydro, etc.)
+    categoryStats: {}            // Category statistics
 }
 
 // Production data state
@@ -524,7 +524,6 @@ function initializeUI() {
     _renderFacilitiesCategories();
     _renderProductionCategories();
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
-
     setupEventHandlers();
 
     if (appState.isProductionMode) {
@@ -571,44 +570,7 @@ function callbackFacilityViewToggle() {
         tableContainer.style.display = 'none';
         toggleButton.textContent = '📊 Table View';
     }
-    updateTableOrMap();
-}
-
-function callbackPowerSlider(values, handle) {
-    function formatPower(power) {
-        if (power >= 1000000) {
-            return `${(power / 1000000).toFixed(1)} GW`;
-        } else if (power >= 1000) {
-            return `${(power / 1000).toFixed(1)} MW`;
-        } else {
-            return `${power.toFixed(1)} kW`;
-        }
-    }
-    appState.minPower = Math.pow(10, values[0] - 1);
-    appState.maxPower = Math.pow(10, values[1] - 1);
-    const minDisplay = formatPower(appState.minPower);
-    const maxDisplay = formatPower(appState.maxPower);
-
-    document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
-    updateFacilityCategories();
-    if (isInitializing) {
-        return;
-    }
-    updateTableOrMap();
-}
-
-let searchTimeout = null;
-function callbackSearchInput(e) {
-    const searchText = e.target.value;
-    // Debounce search (reduce expensive filter computations).
-    if (searchTimeout) {
-        clearTimeout(searchTimeout);
-    }
-    searchTimeout = setTimeout(() => {
-        appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
-        updateFacilityCategories();
-        updateTableOrMap();
-    }, DEBOUNCE_MS);
+    renderTableOrMap();
 }
 
 function callbackProductionResetZoom() {
@@ -618,32 +580,7 @@ function callbackProductionResetZoom() {
 
 function setupEventHandlers() {
 
-    function _setupFacilityCategorySelectorHandlers() {
-        const allCheckbox = document.getElementById('cat-select-all');
-        document.getElementById('categoryTableBody').addEventListener('change', function (e) {
-            if (e.target.type === 'checkbox') {
-                if (e.target.id === 'cat-select-all') {
-                    // Select/deselect all
-                    const checked = e.target.checked;
-                    document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
-                        if (cb.id !== 'cat-select-all') cb.checked = checked;
-                    });
-                    appState.selectedFacilitiesCategories = checked ? [...facilities.categories] : [];
-                } else {
-                    appState.selectedFacilitiesCategories = Array
-                        .from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked'))
-                        .map(cb => cb.value);
-                    // Sync select-all checkbox
-                    const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
-                    allCheckbox.checked = allChecked;
-                }
-                updateTotals();
-                updateTableOrMap();
-            }
-        });
-    }
-
-    function _setupProductionCategorySelectorHandlers() {
+    function setupProductionCategorySelectorHandlers() {
         const allCheckbox = document.getElementById('prod-cat-select-all');
         document.getElementById('productionCategoryTableBody').addEventListener('change', function (e) {
             if (e.target.type === 'checkbox') {
@@ -668,7 +605,7 @@ function setupEventHandlers() {
         });
     }
 
-    function _setupInfoModalHandlers() {
+    function setupInfoModalHandlers() {
         const infoButton = document.getElementById('infoButton');
         const infoModal = document.getElementById('infoModal');
         const closeModal = document.getElementById('closeModal');
@@ -697,9 +634,9 @@ function setupEventHandlers() {
     }
 
     setupTableEventHandlers();
-    _setupFacilityCategorySelectorHandlers();
-    _setupProductionCategorySelectorHandlers();
-    _setupInfoModalHandlers();
+    document.getElementById('categoryTableBody').addEventListener('change', callbackFacilitiesCategories);
+    setupProductionCategorySelectorHandlers();
+    setupInfoModalHandlers();
 
     const facilitiesBtn = document.getElementById('facilitiesMode');
     facilitiesBtn.addEventListener('click', callbackModeFacilities);
@@ -725,14 +662,14 @@ function setupEventHandlers() {
 // Table view
 ///////////////////////////////////////////////////////////////////////////////
 
-function pageNumberCallback(e) {
+function callbackPageNumber(e) {
     const totalPages = Math.ceil(facilities.onTable.length / TABLE_NUM_ROWS);
 
     function createPageNumberSpan() {
         const span = document.createElement('span');
         span.id = 'currentPageNumber';
         span.textContent = appState.currentPage.toString();
-        span.addEventListener('click', pageNumberCallback);
+        span.addEventListener('click', callbackPageNumber);
         return span;
     }
     function createPageNumberInput() {
@@ -811,7 +748,7 @@ function setupTableEventHandlers() {
     });
 
     // Page number click => inline input
-    document.getElementById('currentPageNumber').addEventListener('click', pageNumberCallback);
+    document.getElementById('currentPageNumber').addEventListener('click', callbackPageNumber);
 }
 
 function sortFacilities(column, sortAscending) {
@@ -856,7 +793,7 @@ function sortTable(column) {
     // Sort the underlying facilities array
     sortFacilities(column, appState.currentSort.sortAscending);
     console.log('sortTable', facilities.all[0]);
-    updateFacilityCategories();
+    filterFacilities();
     renderTable(true);
 }
 
@@ -950,12 +887,73 @@ function renderTable(reset = false) {
     document.getElementById('nextPage').disabled = p >= totalPages;
     document.getElementById('lastPage').disabled = p >= totalPages;
 
+    renderFacilitiesCategories();
+
     serializeStateToURL();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Utility functions
+// Search and filters
 ///////////////////////////////////////////////////////////////////////////////
+
+function callbackFacilitiesCategories(e) {
+    if (e.target.type !== 'checkbox') { return; }
+    const allCheckbox = document.getElementById('cat-select-all');
+    if (e.target.id === allCheckbox.id) {
+        // Select/deselect all
+        const checked = e.target.checked;
+        document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
+            if (cb.id !== allCheckbox.id) cb.checked = checked;
+        });
+        appState.selectedFacilitiesCategories = checked ? [...facilities.categories] : [];
+    } else {
+        appState.selectedFacilitiesCategories = Array
+            .from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked'))
+            .map(cb => cb.value);
+        // Sync select-all checkbox
+        const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
+        allCheckbox.checked = allChecked;
+    }
+    filterFacilities();
+    renderTableOrMap();
+}
+
+let searchTimeout = null;
+function callbackSearchInput(e) {
+    const searchText = e.target.value;
+    // Debounce search (reduce expensive filter computations).
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    searchTimeout = setTimeout(() => {
+        appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+        filterFacilities();
+        renderTableOrMap();
+    }, DEBOUNCE_MS);
+}
+
+function callbackPowerSlider(values, handle) {
+    function formatPower(power) {
+        if (power >= 1000000) {
+            return `${(power / 1000000).toFixed(1)} GW`;
+        } else if (power >= 1000) {
+            return `${(power / 1000).toFixed(1)} MW`;
+        } else {
+            return `${power.toFixed(1)} kW`;
+        }
+    }
+    appState.minPower = Math.pow(10, values[0] - 1);
+    appState.maxPower = Math.pow(10, values[1] - 1);
+    const minDisplay = formatPower(appState.minPower);
+    const maxDisplay = formatPower(appState.maxPower);
+
+    document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
+    filterFacilities();
+    if (isInitializing) {
+        return;
+    }
+    renderTableOrMap();
+}
 
 function facilityMatchesSearch(f) {
     if (appState.searchTokens.length === 0) return true;
@@ -974,11 +972,39 @@ function facilityMatchesSearch(f) {
     return appState.searchTokens.every(token => searchableText.includes(token));
 }
 
-function updateTableOrMap() {
+function filterFacilities() {
+    facilities.categoryStats = {};
+    facilities.categories.forEach(category => {
+        facilities.categoryStats[category] = { count: 0, capacity: 0 };
+    });
+
+    let totalCapacity = 0;
+    let totalCount = 0;
+    facilities.filtered = [];
+
+    facilities.all
+        .filter(f => f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
+        .filter(f => facilityMatchesSearch(f))
+        .forEach(f => {
+            const category = f.SubCategory;
+            const MW = f.TotalPower / 1000;
+            facilities.categoryStats[category].count++;
+            facilities.categoryStats[category].capacity += MW;
+            // Add to filtered facilities if category is selected
+            if (appState.selectedFacilitiesCategories.includes(category)) {
+                facilities.filtered.push(f);
+                totalCapacity += MW;
+                totalCount++;
+            }
+        });
+    facilities.categoryStats['Total'] = { count: totalCount, capacity: totalCapacity };
+}
+
+function renderTableOrMap() {
     if (appState.isTableView) {
         renderTable(true);
     } else {
-        updateMap();
+        renderMap();
     }
 }
 
@@ -1004,8 +1030,8 @@ function modeFacilities() {
         searchInput.value = appState.searchTokens.join(' ');
     }
 
-    updateFacilityCategories();
-    updateTableOrMap();
+    filterFacilities();
+    renderTableOrMap();
 }
 
 function modeProduction() {
@@ -1034,68 +1060,32 @@ function modeProduction() {
     updateProductionChart();
 }
 
-function updateFacilityCategories() {
-    const categoryStats = {};
+function renderFacilitiesCategories() {
     facilities.categories.forEach(category => {
-        categoryStats[category] = { count: 0, capacity: 0 };
-    });
-
-    let totalCapacity = 0;
-    let totalCount = 0;
-    facilities.filtered = [];
-
-    facilities.all
-        .filter(f => f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
-        .filter(f => facilityMatchesSearch(f))
-        .forEach(f => {
-            const category = f.SubCategory;
-
-            // Update category stats
-            if (categoryStats[category]) {
-                categoryStats[category].count++;
-                categoryStats[category].capacity += f.TotalPower / 1000; // Convert to MW
-            }
-
-            // Add to filtered facilities if category is selected
-            if (appState.selectedFacilitiesCategories.includes(category)) {
-                facilities.filtered.push(f);
-                totalCapacity += f.TotalPower / 1000; // Convert to MW
-                totalCount++;
-            }
-        });
-    // Update category display elements
-    facilities.categories.forEach(category => {
-        const stats = categoryStats[category];
+        const stats = facilities.categoryStats[category];
         const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
         const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
         if (countElement) countElement.textContent = stats.count.toLocaleString();
         if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
     });
-
-    // Update totals
-    document.getElementById('totalCount').textContent = totalCount.toLocaleString();
-    document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
+    document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
+    document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
 }
 
-function updateTotals() {
-    facilities.filtered = facilities.all
-        .filter(f => appState.selectedFacilitiesCategories.includes(f.SubCategory) && f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
-        .filter(f => facilityMatchesSearch(f));
-    const totalCount = facilities.filtered.length;
-    const totalCapacity = facilities.filtered.reduce((total, f) => total + f.TotalPower, 0) / 1000; // Convert to MW
+///////////////////////////////////////////////////////////////////////////////
+// Facilities mode, map view
+///////////////////////////////////////////////////////////////////////////////
 
-    document.getElementById('totalCount').textContent = totalCount.toLocaleString();
-    document.getElementById('totalCapacity').textContent = totalCapacity.toFixed(1);
-}
-
-function updateMap() {
+function renderMap() {
     if (appState.isTableView) {
         throw new Error('updateMap called in table view');
     }
-    facilities.onMap = facilities.filtered.filter(f => f.lat && f.lon)
+    renderFacilitiesCategories();
+
+    const onMap = facilities.filtered.filter(f => f.lat && f.lon)
     const scatterplotLayer = new ScatterplotLayer({
         id: 'facilities',
-        data: facilities.onMap,
+        data: onMap,
         getPosition: d => [d.lon, d.lat],
         getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
         getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
@@ -1114,9 +1104,9 @@ function updateMap() {
 
     console.log('lastUpdate', lastUpdate);
     document.getElementById('annotations').innerHTML =
-        `${facilities.filtered.length.toLocaleString()} facilities match filters.<br/>Map shows ${facilities.onMap.length.toLocaleString()} facilities.` +
+        `${facilities.filtered.length.toLocaleString()} facilities match filters.<br/>Map shows ${onMap.length.toLocaleString()} facilities.` +
         `<span class="info-asterisk">*` +
-        `<span class="tooltip">${(facilities.filtered.length - facilities.onMap.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
+        `<span class="tooltip">${(facilities.filtered.length - onMap.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
         `</span>` +
         (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
 
