@@ -630,7 +630,7 @@ function callbackFacilityViewToggle() {
 
 function renderFacilities() {
     if (appState.isTableView) {
-        renderTable(true);
+        renderTable();
     } else {
         renderMap();
     }
