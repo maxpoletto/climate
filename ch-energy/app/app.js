@@ -389,7 +389,7 @@ function initializeUI() {
     }
 
     function _renderFacilitiesCheckboxes() {
-        const container = document.getElementById('categoryTableBody');
+        const container = document.getElementById('facilitiesCategoryTableBody');
         container.innerHTML = '';
 
         // Select/Deselect all checkbox
@@ -532,6 +532,60 @@ function initializeUI() {
     }
 }
 
+function setupEventHandlers() {
+    function setupInfoModalHandlers() {
+        const infoButton = document.getElementById('infoButton');
+        const infoModal = document.getElementById('infoModal');
+        const closeModal = document.getElementById('closeModal');
+
+        infoButton.addEventListener('click', () => {
+            infoModal.classList.add('show');
+        });
+
+        closeModal.addEventListener('click', () => {
+            infoModal.classList.remove('show');
+        });
+
+        // Close modal when clicking outside
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.classList.remove('show');
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
+                infoModal.classList.remove('show');
+            }
+        });
+    }
+
+    setupTableEventHandlers();
+    setupInfoModalHandlers();
+
+    const facilitiesBtn = document.getElementById('facilitiesMode');
+    facilitiesBtn.addEventListener('click', callbackModeFacilities);
+
+    const productionBtn = document.getElementById('productionMode');
+    productionBtn.addEventListener('click', callbackModeProduction);
+
+    const viewToggle = document.getElementById('viewToggle');
+    viewToggle.addEventListener('click', callbackFacilityViewToggle);
+
+    const powerRangeSlider = document.getElementById('powerRangeSlider');
+    powerRangeSlider.noUiSlider.on('update', callbackPowerSlider);
+
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', callbackSearchInput);
+
+    document.getElementById('facilitiesCategoryTableBody').addEventListener('change', callbackFacilitiesCategories);
+    document.getElementById('productionCategoryTableBody').addEventListener('change', callbackProductionCategories);
+
+    const resetZoomBtn = document.getElementById('resetZoom');
+    resetZoomBtn.addEventListener('click', callbackProductionResetZoom);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Mode switching
 ///////////////////////////////////////////////////////////////////////////////
@@ -629,92 +683,20 @@ function callbackFacilityViewToggle() {
 }
 
 function renderFacilities(reset = false) {
-    renderFacilitiesCategories();
+    facilities.categories.forEach(category => {
+        const stats = facilities.categoryStats[category];
+        const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
+        const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
+        if (countElement) countElement.textContent = stats.count.toLocaleString();
+        if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
+    });
+    document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
+    document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
     if (appState.isTableView) {
         renderTable(reset);
     } else {
         renderMap();
     }
-}
-
-function setupEventHandlers() {
-
-    function setupProductionCategorySelectorHandlers() {
-        const allCheckbox = document.getElementById('prod-cat-select-all');
-        document.getElementById('productionCategoryTableBody').addEventListener('change', function (e) {
-            if (e.target.type === 'checkbox') {
-                if (e.target.id === 'prod-cat-select-all') {
-                    // Select/deselect all
-                    const checked = e.target.checked;
-                    document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
-                        if (cb.id !== 'prod-cat-select-all') cb.checked = checked;
-                    });
-                    appState.selectedProductionCategories = checked ? [...PRODUCTION_CATEGORIES] : [];
-                } else {
-                    appState.selectedProductionCategories = Array
-                        .from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked'))
-                        .map(cb => cb.value);
-                    // Sync select-all checkbox
-                    const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
-                    allCheckbox.checked = allChecked;
-                }
-                updateProductionChart();
-                serializeStateToURL();
-            }
-        });
-    }
-
-    function setupInfoModalHandlers() {
-        const infoButton = document.getElementById('infoButton');
-        const infoModal = document.getElementById('infoModal');
-        const closeModal = document.getElementById('closeModal');
-
-        infoButton.addEventListener('click', () => {
-            infoModal.classList.add('show');
-        });
-
-        closeModal.addEventListener('click', () => {
-            infoModal.classList.remove('show');
-        });
-
-        // Close modal when clicking outside
-        infoModal.addEventListener('click', (e) => {
-            if (e.target === infoModal) {
-                infoModal.classList.remove('show');
-            }
-        });
-
-        // Close modal with Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
-                infoModal.classList.remove('show');
-            }
-        });
-    }
-
-    setupTableEventHandlers();
-    document.getElementById('categoryTableBody').addEventListener('change', callbackFacilitiesCategories);
-    setupProductionCategorySelectorHandlers();
-    setupInfoModalHandlers();
-
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    facilitiesBtn.addEventListener('click', callbackModeFacilities);
-
-    const productionBtn = document.getElementById('productionMode');
-    productionBtn.addEventListener('click', callbackModeProduction);
-
-    const viewToggle = document.getElementById('viewToggle');
-    viewToggle.addEventListener('click', callbackFacilityViewToggle);
-
-    const powerRangeSlider = document.getElementById('powerRangeSlider');
-    powerRangeSlider.noUiSlider.on('update', callbackPowerSlider);
-
-    const searchInput = document.getElementById('searchInput');
-    searchInput.addEventListener('input', callbackSearchInput);
-
-    const resetZoomBtn = document.getElementById('resetZoom');
-    resetZoomBtn.addEventListener('click', callbackProductionResetZoom);
-
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -850,18 +832,6 @@ function sortTable(column) {
     sortFacilities(column, appState.currentSort.sortAscending);
     filterFacilities();
     renderTable();
-}
-
-function renderFacilitiesCategories() {
-    facilities.categories.forEach(category => {
-        const stats = facilities.categoryStats[category];
-        const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
-        const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
-        if (countElement) countElement.textContent = stats.count.toLocaleString();
-        if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
-    });
-    document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
-    document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
 }
 
 function renderTable(reset = false) {
@@ -1004,13 +974,13 @@ function callbackFacilitiesCategories(e) {
     if (e.target.id === allCheckbox.id) {
         // Select/deselect all
         const checked = e.target.checked;
-        document.querySelectorAll('#categoryTableBody input[type="checkbox"]').forEach(cb => {
+        document.querySelectorAll('#facilitiesCategoryTableBody input[type="checkbox"]').forEach(cb => {
             if (cb.id !== allCheckbox.id) cb.checked = checked;
         });
         appState.selectedFacilitiesCategories = checked ? [...facilities.categories] : [];
     } else {
         appState.selectedFacilitiesCategories = Array
-            .from(document.querySelectorAll('#categoryTableBody input[type="checkbox"]:not(#cat-select-all):checked'))
+            .from(document.querySelectorAll('#facilitiesCategoryTableBody input[type="checkbox"]:not(#cat-select-all):checked'))
             .map(cb => cb.value);
         // Sync select-all checkbox
         const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
@@ -1105,6 +1075,28 @@ function filterFacilities() {
 ///////////////////////////////////////////////////////////////////////////////
 // Production mode
 ///////////////////////////////////////////////////////////////////////////////
+
+function callbackProductionCategories(e) {
+    const allCheckbox = document.getElementById('prod-cat-select-all');
+    if (e.target.type !== 'checkbox') { return; }
+    const checked = e.target.checked;
+    if (e.target.id === allCheckbox.id) {
+        // Select/deselect all
+        document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
+            if (cb.id !== allCheckbox.id) cb.checked = checked;
+        });
+        appState.selectedProductionCategories = checked ? [...PRODUCTION_CATEGORIES] : [];
+    } else {
+        appState.selectedProductionCategories = Array
+            .from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked'))
+            .map(cb => cb.value);
+        // Sync select-all checkbox
+        const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
+        allCheckbox.checked = allChecked;
+    }
+    updateProductionChart();
+    serializeStateToURL();
+}
 
 function callbackProductionResetZoom() {
     if (!productionChart) return;
