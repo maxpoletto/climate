@@ -61,6 +61,7 @@ let isInitializing = true;       // Flag to prevent nouiSlider callbacks from be
 let facilities = {
     all: [],                     // All power facilities.
     filtered: [],                // Facilities that match the current selection (category, power range)
+    onMap: [],                   // Facilities that are rendered on the map (have GPS coordinates)
     categories: [],              // All categories (solar, hydro, etc.)
     categoryStats: {}            // Category statistics (count and totals by category)
 };
@@ -692,6 +693,13 @@ function renderFacilities(reset = false) {
     });
     document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
     document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
+
+    const nf = facilities.filtered.length, om = facilities.onMap.length, d = nf - om;
+    document.getElementById('annotations').innerHTML = `${nf.toLocaleString()} facilities match filters.<br/>`
+    + `Map shows ${om.toLocaleString()} facilities.<span class="info-asterisk">*`
+    + `<span class="tooltip">${d.toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span></span>`
+    + (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
+
     if (appState.isTableView) {
         renderTable(reset);
     } else {
@@ -933,10 +941,9 @@ function renderMap() {
         throw new Error('updateMap called in table view');
     }
 
-    const onMap = facilities.filtered.filter(f => f.lat && f.lon)
     const scatterplotLayer = new ScatterplotLayer({
         id: 'facilities',
-        data: onMap,
+        data: facilities.onMap,
         getPosition: d => [d.lon, d.lat],
         getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
         getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
@@ -952,14 +959,6 @@ function renderMap() {
     });
 
     deckgl.setProps({ layers: [scatterplotLayer] });
-
-    console.log('lastUpdate', lastUpdate);
-    document.getElementById('annotations').innerHTML =
-        `${facilities.filtered.length.toLocaleString()} facilities match filters.<br/>Map shows ${onMap.length.toLocaleString()} facilities.` +
-        `<span class="info-asterisk">*` +
-        `<span class="tooltip">${(facilities.filtered.length - onMap.length).toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span>` +
-        `</span>` +
-        (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
 
     serializeStateToURL();
 }
@@ -1070,6 +1069,7 @@ function filterFacilities() {
             }
         });
     facilities.categoryStats['Total'] = { count: totalCount, capacity: totalCapacity };
+    facilities.onMap = facilities.filtered.filter(f => f.lat && f.lon);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
