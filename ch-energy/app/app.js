@@ -118,7 +118,6 @@ function serializeStateToURL() {
         // Update URL without triggering a page reload
         const newURL = `${window.location.pathname}?s=${encodedState}`;
         window.history.replaceState({}, '', newURL);
-        console.log('encoded state', appState);
     }, DEBOUNCE_MS);
 }
 
@@ -190,7 +189,6 @@ function deserializeStateFromURL() {
     } catch (error) {
         console.warn('Failed to deserialize state from URL:', error);
     }
-    console.log('decoded state', appState);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1264,17 +1262,13 @@ function updateProductionTimeUnit(chart) {
     const range = chart.scales.x.max - chart.scales.x.min;
     const days = range / 24 / 60 / 60 / 1000;
 
-    console.log('range from', new Date(chart.scales.x.min).toISOString(), 'to', new Date(chart.scales.x.max).toISOString(), 'is', days, 'days');
     let unit = 'quarter', tooltipFormat = 'MMM yyyy';
     if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
     else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
     else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
 
-    console.log('current unit', chart.options.scales.x.time.unit);
-    console.log('new unit', unit);
     const currentUnit = chart.options.scales.x.time.unit;
     if (currentUnit === unit) return;
-    // console.log(`Zoom: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
     chart.options.scales.x.time.unit = unit;
     chart.options.scales.x.time.tooltipFormat = tooltipFormat;
 }
