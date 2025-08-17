@@ -96,8 +96,8 @@ const appState = {
 
     // Production chart state
     productionChart: {
-        xmin: null,
-        xmax: null
+        xmin: 0,
+        xmax: Infinity
     }
 };
 
@@ -184,8 +184,8 @@ function deserializeStateFromURL() {
             decodeFloat(state.mapView.zoom, (val) => appState.mapView.zoom = val, 0);
         }
         if (state.productionChart && typeof state.productionChart === 'object') {
-            decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val);
-            decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val);
+            decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val, 0);
+            decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val, appState.productionChart.xmin);
         }
     } catch (error) {
         console.warn('Failed to deserialize state from URL:', error);
@@ -517,14 +517,21 @@ function initializeUI() {
             tr.appendChild(avgCell);
             container.appendChild(tr);
         });
-        updateProductionStats(0, Infinity);
     }
 
     _renderPowerSlider();
     _renderFacilitiesCheckboxes();
     _renderProductionCheckboxes();
-    sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
     setupEventHandlers();
+    sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
+    createProductionChart();
+    const min = appState.productionChart.xmin, max = appState.productionChart.xmax;
+    productionChart.scales.x.min = min;
+    productionChart.scales.x.max = max;
+    productionChart.options.scales.x.min = min;
+    productionChart.options.scales.x.max = max;
+    updateProductionCategories(min, max);
+    updateProductionTimeUnit(productionChart);
 
     if (appState.isProductionMode) {
         modeProduction();
@@ -1103,6 +1110,22 @@ function callbackProductionResetZoom() {
     productionChart.resetZoom();
 }
 
+function callbackProductionPan(chart) {
+    updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
+    appState.productionChart.xmin = chart.scales.x.min;
+    appState.productionChart.xmax = chart.scales.x.max;
+    serializeStateToURL();
+}
+
+function callbackProductionZoom(chart) {
+    updateProductionTimeUnit(chart);
+    updateProductionChart(chart.scales.x.min, chart.scales.x.max);
+    updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
+    appState.productionChart.xmin = chart.scales.x.min;
+    appState.productionChart.xmax = chart.scales.x.max;
+    serializeStateToURL();
+}
+
 function createProductionChart() {
     const ctx = document.getElementById('productionChart').getContext('2d');
 
@@ -1146,24 +1169,12 @@ function createProductionChart() {
                             enabled: false
                         },
                         mode: 'x',
-                        onZoomComplete: ({ chart }) => {
-                            updateTimeUnit(chart);
-                            updateProductionChart(chart.scales.x.min, chart.scales.x.max);
-                            updateProductionStats(chart.scales.x.min, chart.scales.x.max);
-                            appState.productionChart.xmin = chart.scales.x.min;
-                            appState.productionChart.xmax = chart.scales.x.max;
-                            serializeStateToURL();
-                        }
+                        onZoomComplete: callbackProductionZoom
                     },
                     pan: {
                         enabled: true,
                         mode: 'x',
-                        onPanComplete: ({ chart }) => {
-                            updateProductionStats(chart.scales.x.min, chart.scales.x.max);
-                            appState.productionChart.xmin = chart.scales.x.min;
-                            appState.productionChart.xmax = chart.scales.x.max;
-                            serializeStateToURL();
-                        }
+                        onPanComplete: callbackProductionPan
                     },
                     limits: {
                         x: {
@@ -1221,74 +1232,29 @@ function createProductionChart() {
             case '-': case '_':
                 e.preventDefault();
                 productionChart.zoom(0.8);
-                productionChart.options.plugins.zoom.zoom.onZoomComplete({ chart: productionChart });
+                callbackProductionZoom(productionChart);
                 break;
             case '+': case '=':
                 e.preventDefault();
                 productionChart.zoom(1.2);
-                productionChart.options.plugins.zoom.zoom.onZoomComplete({ chart: productionChart });
+                callbackProductionZoom(productionChart);
                 break;
             case 'ArrowLeft':
                 e.preventDefault();
                 productionChart.pan({ x: 100 });
-                productionChart.options.plugins.zoom.pan.onPanComplete({ chart: productionChart });
+                callbackProductionPan(productionChart);
                 break;
             case 'ArrowRight':
                 e.preventDefault();
                 productionChart.pan({ x: -100 });
-                productionChart.options.plugins.zoom.pan.onPanComplete({ chart: productionChart });
+                callbackProductionPan(productionChart);
                 break;
         }
     };
     document.addEventListener('keydown', window.productionChartKeyListener);
 }
 
-function aggregateDataByTimeUnit(unit) {
-    const aggregated = {};
-
-    productionData.forEach(record => {
-        const date = new Date(record.date);
-        date.setHours(0, 0, 0, 0);
-        switch (unit) {
-            case 'week':
-                date.setDate(date.getDate() - date.getDay());
-                break;
-            case 'month':
-                date.setDate(1);
-                break;
-            case 'quarter':
-                date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
-                break;
-            case 'year':
-                date.setFullYear(date.getFullYear(), 0, 1);
-                break;
-            default:
-                break;
-        }
-        const key = date.getTime();
-        if (!aggregated[key]) {
-            aggregated[key] = {
-                date: key,
-                prod: new Array(6).fill(0),
-                count: 0
-            };
-        }
-        record.prod.forEach((value, index) => {
-            aggregated[key].prod[index] += value;
-        });
-        aggregated[key].count += 1;
-    });
-
-    // Create time-sorted array of aggregated data
-    return Object.values(aggregated).map(item => {
-        return {
-            date: item.date,
-            prod: item.prod
-        };
-    }).sort((a, b) => a.date - b.date);
-}
-
-function updateTimeUnit(chart) {
+function updateProductionTimeUnit(chart) {
     if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
         console.warn('Chart scales not available for time unit update');
         return;
@@ -1298,11 +1264,14 @@ function updateTimeUnit(chart) {
     const range = chart.scales.x.max - chart.scales.x.min;
     const days = range / 24 / 60 / 60 / 1000;
 
+    console.log('range from', new Date(chart.scales.x.min).toISOString(), 'to', new Date(chart.scales.x.max).toISOString(), 'is', days, 'days');
     let unit = 'quarter', tooltipFormat = 'MMM yyyy';
     if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
     else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
     else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
 
+    console.log('current unit', chart.options.scales.x.time.unit);
+    console.log('new unit', unit);
     const currentUnit = chart.options.scales.x.time.unit;
     if (currentUnit === unit) return;
     // console.log(`Zoom: ${days.toFixed(0)} days visible, switching ${currentUnit} -> ${unit}`);
@@ -1310,7 +1279,7 @@ function updateTimeUnit(chart) {
     chart.options.scales.x.time.tooltipFormat = tooltipFormat;
 }
 
-function updateProductionStats(minDate, maxDate) {
+function updateProductionCategories(minDate, maxDate) {
     const totals = new Array(6).fill(0);
     let count = 0;
 
@@ -1332,13 +1301,54 @@ function updateProductionStats(minDate, maxDate) {
 }
 
 function updateProductionChart(minDate, maxDate) {
-    if (!productionChart) {
-        createProductionChart();
-    }
+        function aggregateByTimeUnit(unit) {
+            const aggregated = {};
+        
+            productionData.forEach(record => {
+                const date = new Date(record.date);
+                date.setHours(0, 0, 0, 0);
+                switch (unit) {
+                    case 'week':
+                        date.setDate(date.getDate() - date.getDay());
+                        break;
+                    case 'month':
+                        date.setDate(1);
+                        break;
+                    case 'quarter':
+                        date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
+                        break;
+                    case 'year':
+                        date.setFullYear(date.getFullYear(), 0, 1);
+                        break;
+                    default:
+                        break;
+                }
+                const key = date.getTime();
+                if (!aggregated[key]) {
+                    aggregated[key] = {
+                        date: key,
+                        prod: new Array(6).fill(0),
+                        count: 0
+                    };
+                }
+                record.prod.forEach((value, index) => {
+                    aggregated[key].prod[index] += value;
+                });
+                aggregated[key].count += 1;
+            });
+        
+            // Create time-sorted array of aggregated data
+            return Object.values(aggregated).map(item => {
+                return {
+                    date: item.date,
+                    prod: item.prod
+                };
+            }).sort((a, b) => a.date - b.date);
+        }
 
-    let currentUnit = productionChart.options.scales.x.time.unit
+    let currentUnit = productionChart.options.scales.x.time.unit;
 
-    const aggregatedData = aggregateDataByTimeUnit(currentUnit);
+    const aggregatedData = aggregateByTimeUnit(currentUnit);
     const datasets = [];
 
     [...appState.selectedProductionCategories].reverse().forEach((category, index) => {
