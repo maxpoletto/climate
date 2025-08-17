@@ -524,12 +524,12 @@ function initializeUI() {
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
     createProductionChart();
     const min = appState.productionChart.xmin, max = appState.productionChart.xmax;
-    productionChart.scales.x.min = min;
-    productionChart.scales.x.max = max;
     productionChart.options.scales.x.min = min;
     productionChart.options.scales.x.max = max;
-    updateProductionCategories(min, max);
+    productionChart.update();
+
     updateProductionTimeUnit(productionChart);
+    updateProductionCategories(min, max);
 
     if (appState.isProductionMode) {
         modeProduction();
@@ -1108,14 +1108,14 @@ function callbackProductionResetZoom() {
     productionChart.resetZoom();
 }
 
-function callbackProductionPan(chart) {
+function callbackProductionPan({ chart }) {
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
     appState.productionChart.xmin = chart.scales.x.min;
     appState.productionChart.xmax = chart.scales.x.max;
     serializeStateToURL();
 }
 
-function callbackProductionZoom(chart) {
+function callbackProductionZoom({ chart }) {
     updateProductionTimeUnit(chart);
     updateProductionChart(chart.scales.x.min, chart.scales.x.max);
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
