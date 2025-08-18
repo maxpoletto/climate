@@ -117,8 +117,6 @@ function serializeStateToURL() {
     }
 
     serializeTimeout = setTimeout(() => {
-        console.log('serializeStateToURL');
-        console.trace();
         const encodedState = btoa(JSON.stringify(appState));
 
         // Update URL without triggering a page reload
@@ -551,7 +549,7 @@ function initializeUI() {
         modeProduction();
     } else {
         modeFacilities();
-   }
+    }
 }
 
 function setupEventHandlers() {
@@ -671,10 +669,6 @@ function modeProduction() {
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackFacilitiesViewToggle() {
-    if (appState.isProductionMode) {
-        throw new Error('callbackFacilityViewToggle called in production mode');
-    }
-
     appState.isTableView = !appState.isTableView;
     renderFacilitiesToggle();
     renderFacilities();
@@ -693,8 +687,6 @@ function renderFacilitiesToggle() {
 }
 
 function renderFacilities(reset = false) {
-    console.log('renderFacilities', reset);
-    console.trace();
     if (!tableFresh || !mapFresh) {
         facilities.categories.forEach(category => {
             const stats = facilities.categoryStats[category];
@@ -863,15 +855,12 @@ function sortTable(column) {
 }
 
 function renderTable(reset = false) {
-    if (!appState.isTableView) {
-        throw new Error('updateTable called in map view');
-    }
     if (reset) {
         appState.currentPage = 1;
     }
     serializeStateToURL();
+
     if (tableFresh && !reset) { return; }
-    console.log('renderTable', reset);
 
     const p = appState.currentPage;
 
@@ -961,14 +950,9 @@ function renderTable(reset = false) {
 ///////////////////////////////////////////////////////////////////////////////
 
 function renderMap() {
-    if (appState.isTableView) {
-        throw new Error('updateMap called in table view');
-    }
     serializeStateToURL();
-    if (mapFresh) {
-        return;
-    }
-    console.log('renderMap');
+
+    if (mapFresh) { return; }
 
     const scatterplotLayer = new ScatterplotLayer({
         id: 'facilities',
@@ -1365,9 +1349,9 @@ function updateProductionChart(minDate, maxDate) {
             };
         }).sort((a, b) => a.date - b.date);
     }
-    console.log('updateProductionChart', productionFresh);
+
     if (productionFresh) { return; }
-    console.log('updateProductionChart2');
+
     let currentUnit = productionChart.options.scales.x.time.unit;
 
     const aggregatedData = aggregateByTimeUnit(currentUnit);
