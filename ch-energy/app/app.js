@@ -58,6 +58,9 @@ const { Deck, ScatterplotLayer } = deck;
 let lastUpdate = null;           // Last data update date string.
 let isInitializing = true;       // Flag to prevent nouiSlider callbacks from being called during initialization
 
+let tableFresh = false;
+let mapFresh = false;
+
 let facilities = {
     all: [],                     // All power facilities.
     filtered: [],                // Facilities that match the current selection (category, power range)
@@ -96,7 +99,7 @@ const appState = {
 
     // Production chart state
     productionChart: {
-        xmin: 0,
+        xmin: new Date('2015-01-01').getTime(),
         xmax: Infinity
     }
 };
@@ -108,6 +111,8 @@ const appState = {
 let serializeTimeout = null;
 function serializeStateToURL() {
     // Serialize the full appState to JSON and encode as base64
+    console.log('serializeStateToURL');
+    console.trace();
     if (serializeTimeout) {
         clearTimeout(serializeTimeout);
     }
@@ -387,6 +392,13 @@ function initializeUI() {
         });
     }
 
+    function _renderSearchInput() {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = appState.searchTokens.join(' ');
+        }
+    }
+
     function _renderFacilitiesCheckboxes() {
         const container = document.getElementById('facilitiesCategoryTableBody');
         container.innerHTML = '';
@@ -518,16 +530,19 @@ function initializeUI() {
     }
 
     _renderPowerSlider();
+    _renderSearchInput();
     _renderFacilitiesCheckboxes();
     _renderProductionCheckboxes();
     setupEventHandlers();
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
+    filterFacilities();
+
     createProductionChart();
-    const min = appState.productionChart.xmin, max = appState.productionChart.xmax;
+    const min = Math.max(appState.productionChart.xmin, new Date('2015-01-01').getTime());
+    const max = Math.min(appState.productionChart.xmax, new Date().getTime());
     productionChart.options.scales.x.min = min;
     productionChart.options.scales.x.max = max;
     productionChart.update();
-
     updateProductionTimeUnit(productionChart);
     updateProductionCategories(min, max);
 
@@ -535,6 +550,8 @@ function initializeUI() {
         modeProduction();
     } else {
         modeFacilities();
+        renderFacilitiesToggle();
+        renderFacilities();
     }
 }
 
@@ -577,7 +594,7 @@ function setupEventHandlers() {
     productionBtn.addEventListener('click', callbackModeProduction);
 
     const viewToggle = document.getElementById('viewToggle');
-    viewToggle.addEventListener('click', callbackFacilityViewToggle);
+    viewToggle.addEventListener('click', callbackFacilitiesViewToggle);
 
     const powerRangeSlider = document.getElementById('powerRangeSlider');
     powerRangeSlider.noUiSlider.on('update', callbackPowerSlider);
@@ -619,21 +636,11 @@ function modeFacilities() {
     // Show facilities controls, hide production controls
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.getElementById('annotations').style.display = 'block';
 
     // Show appropriate view
     document.getElementById('productionView').style.display = 'none';
     document.getElementById('tableView').style.display = appState.isTableView ? 'block' : 'none';
     document.getElementById('map').style.display = appState.isTableView ? 'none' : 'block';
-
-    // Update search box
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.value = appState.searchTokens.join(' ');
-    }
-
-    filterFacilities();
-    renderFacilities();
 }
 
 function modeProduction() {
@@ -642,16 +649,13 @@ function modeProduction() {
     facilitiesBtn.classList.remove('active');
     productionBtn.classList.add('active');
 
+    // Annotation here is just the last update date
+    document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
+    document.getElementById('annotations').innerHTML = lastUpdate ? `Last data update: ${lastUpdate}` : '';
+
     // Hide facilities controls, show production controls
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-    if (lastUpdate) {
-        document.getElementById('annotations').style.display = 'block';
-        document.getElementById('annotations').innerHTML =
-            `Last data update: ${lastUpdate}`;
-    } else {
-        document.getElementById('annotations').style.display = 'none';
-    }
 
     // Show production view
     document.getElementById('map').style.display = 'none';
@@ -666,44 +670,54 @@ function modeProduction() {
 // Facilities mode view switching
 ///////////////////////////////////////////////////////////////////////////////
 
-function callbackFacilityViewToggle() {
+function callbackFacilitiesViewToggle() {
     if (appState.isProductionMode) {
         throw new Error('callbackFacilityViewToggle called in production mode');
     }
 
     appState.isTableView = !appState.isTableView;
-    const mapContainer = document.getElementById('map');
-    const tableContainer = document.getElementById('tableView');
-    const toggleButton = document.getElementById('viewToggle');
-
-    if (appState.isTableView) {
-        mapContainer.style.display = 'none';
-        tableContainer.style.display = 'block';
-        toggleButton.textContent = '🗺️ Map View';
-    } else {
-        mapContainer.style.display = 'block';
-        tableContainer.style.display = 'none';
-        toggleButton.textContent = '📊 Table View';
-    }
+    renderFacilitiesToggle();
     renderFacilities();
 }
 
-function renderFacilities(reset = false) {
-    facilities.categories.forEach(category => {
-        const stats = facilities.categoryStats[category];
-        const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
-        const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
-        if (countElement) countElement.textContent = stats.count.toLocaleString();
-        if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
-    });
-    document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
-    document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
+function renderFacilitiesToggle() {
+    const map = document.getElementById('map');
+    const table = document.getElementById('tableView');
+    const toggle = document.getElementById('viewToggle');
 
-    const nf = facilities.filtered.length, om = facilities.onMap.length, d = nf - om;
-    document.getElementById('annotations').innerHTML = `${nf.toLocaleString()} facilities match filters.<br/>`
-    + `Map shows ${om.toLocaleString()} facilities.<span class="info-asterisk">*`
-    + `<span class="tooltip">${d.toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span></span>`
-    + (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
+    if (appState.isTableView) {
+        map.style.display = 'none';
+        table.style.display = 'block';
+        toggle.textContent = '🗺️ Map View';
+    } else {
+        map.style.display = 'block';
+        table.style.display = 'none';
+        toggle.textContent = '📊 Table View';
+    }
+}
+
+
+function renderFacilities(reset = false) {
+    console.log('renderFacilities', reset);
+    console.trace();
+    if (!tableFresh || !mapFresh) {
+            facilities.categories.forEach(category => {
+            const stats = facilities.categoryStats[category];
+            const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
+            const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
+            if (countElement) countElement.textContent = stats.count.toLocaleString();
+            if (capacityElement) capacityElement.textContent = stats.capacity.toFixed(1);
+
+            const nf = facilities.filtered.length, om = facilities.onMap.length, d = nf - om;
+            document.getElementById('annotations').innerHTML = `${nf.toLocaleString()} facilities match filters.<br/>`
+            + `Map shows ${om.toLocaleString()} facilities.<span class="info-asterisk">*`
+            + `<span class="tooltip">${d.toLocaleString()} facilities lack GPS coordinates or geocodable addresses.</span></span>`
+            + (lastUpdate ? `<br/>Last data update: ${lastUpdate}` : '');
+            document.getElementById('annotations').style.display = 'block';
+        });
+        document.getElementById('totalCount').textContent = facilities.categoryStats['Total'].count.toLocaleString();
+        document.getElementById('totalCapacity').textContent = facilities.categoryStats['Total'].capacity.toFixed(1);
+    }
 
     if (appState.isTableView) {
         renderTable(reset);
@@ -744,6 +758,7 @@ function callbackPageNumber(e) {
         const newSpan = createPageNumberSpan();
         input.parentNode.replaceChild(newSpan, input);
         if (pageNumber >= 1 && pageNumber <= totalPages) {
+            tableFresh = false;
             renderTable();
         }
     }
@@ -777,12 +792,14 @@ function setupTableEventHandlers() {
     document.getElementById('firstPage').addEventListener('click', () => {
         if (appState.currentPage > 1) {
             appState.currentPage = 1;
+            tableFresh = false;
             renderTable();
         }
     });
     document.getElementById('prevPage').addEventListener('click', () => {
         if (appState.currentPage > 1) {
             appState.currentPage--;
+            tableFresh = false;
             renderTable();
         }
     });
@@ -790,6 +807,7 @@ function setupTableEventHandlers() {
         const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
         if (appState.currentPage < totalPages) {
             appState.currentPage++;
+            tableFresh = false;
             renderTable();
         }
     });
@@ -797,6 +815,7 @@ function setupTableEventHandlers() {
         const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
         if (appState.currentPage < totalPages) {
             appState.currentPage = totalPages;
+            tableFresh = false;
             renderTable();
         }
     });
@@ -842,6 +861,7 @@ function sortTable(column) {
         appState.currentSort.column = column;
         appState.currentSort.sortAscending = true;
     }
+    tableFresh = false;
     sortFacilities(column, appState.currentSort.sortAscending);
     filterFacilities();
     renderTable();
@@ -854,6 +874,10 @@ function renderTable(reset = false) {
     if (reset) {
         appState.currentPage = 1;
     }
+    serializeStateToURL();
+    if (tableFresh && !reset) { return; }
+    console.log('renderTable', reset);
+
     const p = appState.currentPage;
 
     // Render table header.
@@ -934,7 +958,7 @@ function renderTable(reset = false) {
     document.getElementById('nextPage').disabled = p >= totalPages;
     document.getElementById('lastPage').disabled = p >= totalPages;
 
-    serializeStateToURL();
+    tableFresh = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -945,6 +969,11 @@ function renderMap() {
     if (appState.isTableView) {
         throw new Error('updateMap called in table view');
     }
+    serializeStateToURL();
+    if (mapFresh) {
+        return;
+    }
+    console.log('renderMap');
 
     const scatterplotLayer = new ScatterplotLayer({
         id: 'facilities',
@@ -964,8 +993,7 @@ function renderMap() {
     });
 
     deckgl.setProps({ layers: [scatterplotLayer] });
-
-    serializeStateToURL();
+    mapFresh = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -990,6 +1018,8 @@ function callbackFacilitiesCategories(e) {
         const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
         allCheckbox.checked = allChecked;
     }
+    tableFresh = false;
+    mapFresh = false;
     filterFacilities();
     renderFacilities(true);
 }
@@ -1003,6 +1033,8 @@ function callbackSearchInput(e) {
     }
     searchTimeout = setTimeout(() => {
         appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
+        tableFresh = false;
+        mapFresh = false;
         filterFacilities();
         renderFacilities(true);
     }, DEBOUNCE_MS);
@@ -1020,14 +1052,12 @@ function callbackPowerSlider(values, handle) {
     }
     appState.minPower = Math.pow(10, values[0] - 1);
     appState.maxPower = Math.pow(10, values[1] - 1);
-    const minDisplay = formatPower(appState.minPower);
-    const maxDisplay = formatPower(appState.maxPower);
-
-    document.getElementById('currentPowerRange').textContent = `${minDisplay} - ${maxDisplay}`;
+    const min = formatPower(appState.minPower), max = formatPower(appState.maxPower);
+    document.getElementById('currentPowerRange').textContent = `${min} - ${max}`;
+    if (isInitializing) { return; }
+    tableFresh = false;
+    mapFresh = false;
     filterFacilities();
-    if (isInitializing) {
-        return;
-    }
     renderFacilities(true);
 }
 
@@ -1297,7 +1327,7 @@ function updateProductionCategories(minDate, maxDate) {
 function updateProductionChart(minDate, maxDate) {
         function aggregateByTimeUnit(unit) {
             const aggregated = {};
-        
+
             productionData.forEach(record => {
                 const date = new Date(record.date);
                 date.setHours(0, 0, 0, 0);
@@ -1330,7 +1360,7 @@ function updateProductionChart(minDate, maxDate) {
                 });
                 aggregated[key].count += 1;
             });
-        
+
             // Create time-sorted array of aggregated data
             return Object.values(aggregated).map(item => {
                 return {
