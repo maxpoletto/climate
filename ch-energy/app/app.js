@@ -58,9 +58,11 @@ const { Deck, ScatterplotLayer } = deck;
 let lastUpdate = null;           // Last data update date string.
 let isInitializing = true;       // Flag to prevent nouiSlider callbacks from being called during initialization
 
-let tableFresh = false;
-let mapFresh = false;
-let productionFresh = false;
+let fresh = {
+    table: false,
+    map: false,
+    production: false
+};
 
 let facilities = {
     all: [],                     // All power facilities.
@@ -687,7 +689,7 @@ function renderFacilitiesToggle() {
 }
 
 function renderFacilities(reset = false) {
-    if (!tableFresh || !mapFresh) {
+    if (!fresh.table || !fresh.map) {
         facilities.categories.forEach(category => {
             const stats = facilities.categoryStats[category];
             const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
@@ -745,7 +747,7 @@ function callbackPageNumber(e) {
         const newSpan = createPageNumberSpan();
         input.parentNode.replaceChild(newSpan, input);
         if (pageNumber >= 1 && pageNumber <= totalPages) {
-            tableFresh = false;
+            fresh.table = false;
             renderTable();
         }
     }
@@ -779,14 +781,14 @@ function setupTableEventHandlers() {
     document.getElementById('firstPage').addEventListener('click', () => {
         if (appState.currentPage > 1) {
             appState.currentPage = 1;
-            tableFresh = false;
+            fresh.table = false;
             renderTable();
         }
     });
     document.getElementById('prevPage').addEventListener('click', () => {
         if (appState.currentPage > 1) {
             appState.currentPage--;
-            tableFresh = false;
+            fresh.table = false;
             renderTable();
         }
     });
@@ -794,7 +796,7 @@ function setupTableEventHandlers() {
         const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
         if (appState.currentPage < totalPages) {
             appState.currentPage++;
-            tableFresh = false;
+            fresh.table = false;
             renderTable();
         }
     });
@@ -802,7 +804,7 @@ function setupTableEventHandlers() {
         const totalPages = Math.ceil(facilities.filtered.length / TABLE_NUM_ROWS);
         if (appState.currentPage < totalPages) {
             appState.currentPage = totalPages;
-            tableFresh = false;
+            fresh.table = false;
             renderTable();
         }
     });
@@ -848,7 +850,7 @@ function sortTable(column) {
         appState.currentSort.column = column;
         appState.currentSort.sortAscending = true;
     }
-    tableFresh = false;
+    fresh.table = false;
     sortFacilities(column, appState.currentSort.sortAscending);
     filterFacilities();
     renderTable();
@@ -860,7 +862,7 @@ function renderTable(reset = false) {
     }
     serializeStateToURL();
 
-    if (tableFresh && !reset) { return; }
+    if (fresh.table && !reset) { return; }
 
     const p = appState.currentPage;
 
@@ -942,7 +944,7 @@ function renderTable(reset = false) {
     document.getElementById('nextPage').disabled = p >= totalPages;
     document.getElementById('lastPage').disabled = p >= totalPages;
 
-    tableFresh = true;
+    fresh.table = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -952,7 +954,7 @@ function renderTable(reset = false) {
 function renderMap() {
     serializeStateToURL();
 
-    if (mapFresh) { return; }
+    if (fresh.map) { return; }
 
     const scatterplotLayer = new ScatterplotLayer({
         id: 'facilities',
@@ -972,7 +974,7 @@ function renderMap() {
     });
 
     deckgl.setProps({ layers: [scatterplotLayer] });
-    mapFresh = true;
+    fresh.map = true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -997,8 +999,8 @@ function callbackFacilitiesCategories(e) {
         const allChecked = appState.selectedFacilitiesCategories.length === facilities.categories.length;
         allCheckbox.checked = allChecked;
     }
-    tableFresh = false;
-    mapFresh = false;
+    fresh.table = false;
+    fresh.map = false;
     filterFacilities();
     renderFacilities(true);
 }
@@ -1012,8 +1014,8 @@ function callbackSearchInput(e) {
     }
     searchTimeout = setTimeout(() => {
         appState.searchTokens = searchText.toLowerCase().split(/\s+/).filter(token => token.length > 0);
-        tableFresh = false;
-        mapFresh = false;
+        fresh.table = false;
+        fresh.map = false;
         filterFacilities();
         renderFacilities(true);
     }, DEBOUNCE_MS);
@@ -1034,8 +1036,8 @@ function callbackPowerSlider(values, handle) {
     const min = formatPower(appState.minPower), max = formatPower(appState.maxPower);
     document.getElementById('currentPowerRange').textContent = `${min} - ${max}`;
     if (isInitializing) { return; }
-    tableFresh = false;
-    mapFresh = false;
+    fresh.table = false;
+    fresh.map = false;
     filterFacilities();
     renderFacilities(true);
 }
@@ -1108,7 +1110,7 @@ function callbackProductionCategories(e) {
         const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
         allCheckbox.checked = allChecked;
     }
-    productionFresh = false;
+    fresh.production = false;
     updateProductionChart();
     serializeStateToURL();
 }
@@ -1125,7 +1127,7 @@ function callbackProductionPan(chart) {
 }
 
 function callbackProductionZoom(chart) {
-    productionFresh = false;
+    fresh.production = false;
     updateProductionTimeUnit(chart);
     updateProductionChart(chart.scales.x.min, chart.scales.x.max);
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
@@ -1350,7 +1352,7 @@ function updateProductionChart(minDate, maxDate) {
         }).sort((a, b) => a.date - b.date);
     }
 
-    if (productionFresh) { return; }
+    if (fresh.production) { return; }
 
     let currentUnit = productionChart.options.scales.x.time.unit;
 
@@ -1395,5 +1397,5 @@ function updateProductionChart(minDate, maxDate) {
     productionChart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
     productionChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
     productionChart.update();
-    productionFresh = true;
+    fresh.production = true;
 }
