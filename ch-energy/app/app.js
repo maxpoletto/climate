@@ -1138,14 +1138,14 @@ function callbackProductionResetZoom() {
     productionChart.resetZoom();
 }
 
-function callbackProductionPan({ chart }) {
+function callbackProductionPan(chart) {
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
     appState.productionChart.xmin = chart.scales.x.min;
     appState.productionChart.xmax = chart.scales.x.max;
     serializeStateToURL();
 }
 
-function callbackProductionZoom({ chart }) {
+function callbackProductionZoom(chart) {
     updateProductionTimeUnit(chart);
     updateProductionChart(chart.scales.x.min, chart.scales.x.max);
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
@@ -1197,12 +1197,12 @@ function createProductionChart() {
                             enabled: false
                         },
                         mode: 'x',
-                        onZoomComplete: callbackProductionZoom
+                        onZoomComplete: ({chart}) => callbackProductionZoom(chart)
                     },
                     pan: {
                         enabled: true,
                         mode: 'x',
-                        onPanComplete: callbackProductionPan
+                        onPanComplete: ({chart}) => callbackProductionPan(chart)
                     },
                     limits: {
                         x: {
