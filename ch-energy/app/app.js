@@ -1061,24 +1061,24 @@ function callbackPowerSlider(values, handle) {
     renderFacilities(true);
 }
 
-function facilityMatchesSearch(f) {
-    if (appState.searchTokens.length === 0) return true;
-
-    // Fields to search: Energy Source, Power, Municipality, Canton, Date started
-    const searchableText = [
-        f.SubCategory || '',
-        (f.TotalPower || '').toString(),
-        f.BeginningOfOperation || '',
-        'city:' + (f.Municipality || ''),
-        'canton:' + (f.Canton || ''),
-        'year:' + (f.BeginningOfOperation || '').slice(0, 4),
-    ].join(' ').toLowerCase();
-
-    // All tokens must be found as substrings
-    return appState.searchTokens.every(token => searchableText.includes(token));
-}
-
 function filterFacilities() {
+    function searchPredicate(f) {
+        if (appState.searchTokens.length === 0) return true;
+    
+        // Fields to search: Energy Source, Power, Municipality, Canton, Date started
+        const searchableText = [
+            f.SubCategory || '',
+            (f.TotalPower || '').toString(),
+            f.BeginningOfOperation || '',
+            'city:' + (f.Municipality || ''),
+            'canton:' + (f.Canton || ''),
+            'year:' + (f.BeginningOfOperation || '').slice(0, 4),
+        ].join(' ').toLowerCase();
+    
+        // All tokens must be found as substrings
+        return appState.searchTokens.every(token => searchableText.includes(token));
+    }
+    
     facilities.categoryStats = {};
     facilities.categories.forEach(category => {
         facilities.categoryStats[category] = { count: 0, capacity: 0 };
@@ -1090,7 +1090,7 @@ function filterFacilities() {
 
     facilities.all
         .filter(f => f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
-        .filter(f => facilityMatchesSearch(f))
+        .filter(f => searchPredicate(f))
         .forEach(f => {
             const category = f.SubCategory;
             const MW = f.TotalPower / 1000;
@@ -1325,50 +1325,50 @@ function updateProductionCategories(minDate, maxDate) {
 }
 
 function updateProductionChart(minDate, maxDate) {
-        function aggregateByTimeUnit(unit) {
-            const aggregated = {};
+    function aggregateByTimeUnit(unit) {
+        const aggregated = {};
 
-            productionData.forEach(record => {
-                const date = new Date(record.date);
-                date.setHours(0, 0, 0, 0);
-                switch (unit) {
-                    case 'week':
-                        date.setDate(date.getDate() - date.getDay());
-                        break;
-                    case 'month':
-                        date.setDate(1);
-                        break;
-                    case 'quarter':
-                        date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
-                        break;
-                    case 'year':
-                        date.setFullYear(date.getFullYear(), 0, 1);
-                        break;
-                    default:
-                        break;
-                }
-                const key = date.getTime();
-                if (!aggregated[key]) {
-                    aggregated[key] = {
-                        date: key,
-                        prod: new Array(6).fill(0),
-                        count: 0
-                    };
-                }
-                record.prod.forEach((value, index) => {
-                    aggregated[key].prod[index] += value;
-                });
-                aggregated[key].count += 1;
-            });
-
-            // Create time-sorted array of aggregated data
-            return Object.values(aggregated).map(item => {
-                return {
-                    date: item.date,
-                    prod: item.prod
+        productionData.forEach(record => {
+            const date = new Date(record.date);
+            date.setHours(0, 0, 0, 0);
+            switch (unit) {
+                case 'week':
+                    date.setDate(date.getDate() - date.getDay());
+                    break;
+                case 'month':
+                    date.setDate(1);
+                    break;
+                case 'quarter':
+                    date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
+                    break;
+                case 'year':
+                    date.setFullYear(date.getFullYear(), 0, 1);
+                    break;
+                default:
+                    break;
+            }
+            const key = date.getTime();
+            if (!aggregated[key]) {
+                aggregated[key] = {
+                    date: key,
+                    prod: new Array(6).fill(0),
+                    count: 0
                 };
-            }).sort((a, b) => a.date - b.date);
-        }
+            }
+            record.prod.forEach((value, index) => {
+                aggregated[key].prod[index] += value;
+            });
+            aggregated[key].count += 1;
+        });
+
+        // Create time-sorted array of aggregated data
+        return Object.values(aggregated).map(item => {
+            return {
+                date: item.date,
+                prod: item.prod
+            };
+        }).sort((a, b) => a.date - b.date);
+    }
 
     let currentUnit = productionChart.options.scales.x.time.unit;
 
