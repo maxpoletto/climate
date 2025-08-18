@@ -60,6 +60,7 @@ let isInitializing = true;       // Flag to prevent nouiSlider callbacks from be
 
 let tableFresh = false;
 let mapFresh = false;
+let productionFresh = false;
 
 let facilities = {
     all: [],                     // All power facilities.
@@ -111,13 +112,13 @@ const appState = {
 let serializeTimeout = null;
 function serializeStateToURL() {
     // Serialize the full appState to JSON and encode as base64
-    console.log('serializeStateToURL');
-    console.trace();
     if (serializeTimeout) {
         clearTimeout(serializeTimeout);
     }
 
     serializeTimeout = setTimeout(() => {
+        console.log('serializeStateToURL');
+        console.trace();
         const encodedState = btoa(JSON.stringify(appState));
 
         // Update URL without triggering a page reload
@@ -550,9 +551,7 @@ function initializeUI() {
         modeProduction();
     } else {
         modeFacilities();
-        renderFacilitiesToggle();
-        renderFacilities();
-    }
+   }
 }
 
 function setupEventHandlers() {
@@ -637,10 +636,11 @@ function modeFacilities() {
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
 
-    // Show appropriate view
+    // Hide production view
     document.getElementById('productionView').style.display = 'none';
-    document.getElementById('tableView').style.display = appState.isTableView ? 'block' : 'none';
-    document.getElementById('map').style.display = appState.isTableView ? 'none' : 'block';
+
+    renderFacilitiesToggle();
+    renderFacilities();
 }
 
 function modeProduction() {
@@ -681,27 +681,22 @@ function callbackFacilitiesViewToggle() {
 }
 
 function renderFacilitiesToggle() {
-    const map = document.getElementById('map');
-    const table = document.getElementById('tableView');
-    const toggle = document.getElementById('viewToggle');
-
     if (appState.isTableView) {
-        map.style.display = 'none';
-        table.style.display = 'block';
-        toggle.textContent = '🗺️ Map View';
+        document.getElementById('map').style.display = 'none';
+        document.getElementById('tableView').style.display = 'block';
+        document.getElementById('viewToggle').textContent = '🗺️ Map View';
     } else {
-        map.style.display = 'block';
-        table.style.display = 'none';
-        toggle.textContent = '📊 Table View';
+        document.getElementById('map').style.display = 'block';
+        document.getElementById('tableView').style.display = 'none';
+        document.getElementById('viewToggle').textContent = '📊 Table View';
     }
 }
-
 
 function renderFacilities(reset = false) {
     console.log('renderFacilities', reset);
     console.trace();
     if (!tableFresh || !mapFresh) {
-            facilities.categories.forEach(category => {
+        facilities.categories.forEach(category => {
             const stats = facilities.categoryStats[category];
             const countElement = document.getElementById(`count-${category.replace(/\s+/g, '-')}`);
             const capacityElement = document.getElementById(`capacity-${category.replace(/\s+/g, '-')}`);
@@ -1129,12 +1124,12 @@ function callbackProductionCategories(e) {
         const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
         allCheckbox.checked = allChecked;
     }
+    productionFresh = false;
     updateProductionChart();
     serializeStateToURL();
 }
 
 function callbackProductionResetZoom() {
-    if (!productionChart) return;
     productionChart.resetZoom();
 }
 
@@ -1146,6 +1141,7 @@ function callbackProductionPan(chart) {
 }
 
 function callbackProductionZoom(chart) {
+    productionFresh = false;
     updateProductionTimeUnit(chart);
     updateProductionChart(chart.scales.x.min, chart.scales.x.max);
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
@@ -1369,7 +1365,9 @@ function updateProductionChart(minDate, maxDate) {
             };
         }).sort((a, b) => a.date - b.date);
     }
-
+    console.log('updateProductionChart', productionFresh);
+    if (productionFresh) { return; }
+    console.log('updateProductionChart2');
     let currentUnit = productionChart.options.scales.x.time.unit;
 
     const aggregatedData = aggregateByTimeUnit(currentUnit);
@@ -1413,4 +1411,5 @@ function updateProductionChart(minDate, maxDate) {
     productionChart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
     productionChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
     productionChart.update();
+    productionFresh = true;
 }
