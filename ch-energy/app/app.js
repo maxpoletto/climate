@@ -1812,7 +1812,6 @@ function updateTradeCategories(minDate, maxDate) {
     TRADE_CATEGORIES.forEach((category, index) => {
         const avgNet = totals[index] / (count / 24); // Convert to daily average
         document.getElementById(`trade-net-${index}`).textContent = avgNet.toFixed(1);
-        console.log('category', category, 'avgNet', avgNet, 'appState.selectedTradeCategories', appState.selectedTradeCategories);
         if (appState.selectedTradeCategories.includes(category)) {
             total += avgNet;
         }
