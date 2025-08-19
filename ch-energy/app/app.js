@@ -47,8 +47,8 @@ const PRODUCTION_CATEGORIES = [
 // Trade categories (countries Switzerland trades with)
 const TRADE_CATEGORIES = [
     'Austria',
-    'Germany',
     'France',
+    'Germany',
     'Italy'
 ];
 
@@ -1792,14 +1792,10 @@ function updateTradeCategories(minDate, maxDate) {
         if (record.date < minDate || record.date > maxDate) return;
 
         // Calculate net imports for each country (imports - exports)
-        // Austria: imports[0] - exports[4]
-        // Germany: imports[1] - exports[5]
-        // France: imports[2] - exports[6]
-        // Italy: imports[3] - exports[7]
-        totals[0] += (record.trade[0] - record.trade[4]) / 1000; // Convert MWh to GWh
-        totals[1] += (record.trade[1] - record.trade[5]) / 1000;
-        totals[2] += (record.trade[2] - record.trade[6]) / 1000;
-        totals[3] += (record.trade[3] - record.trade[7]) / 1000;
+        totals[0] += (record.trade[0] - record.trade[4]) / 1000; // Austria: imports[0] - exports[4]
+        totals[1] += (record.trade[2] - record.trade[6]) / 1000; // France: imports[2] - exports[6]
+        totals[2] += (record.trade[1] - record.trade[5]) / 1000; // Germany: imports[1] - exports[5]
+        totals[3] += (record.trade[3] - record.trade[7]) / 1000; // Italy: imports[3] - exports[7]
         count++;
     });
 
@@ -1865,7 +1861,7 @@ function updateTradeChart(minDate, maxDate) {
     const aggregatedData = aggregateByTimeUnit(currentUnit);
     const datasets = [];
 
-    [...appState.selectedTradeCategories].reverse().forEach((category, index) => {
+    [...appState.selectedTradeCategories].forEach((category, index) => {
         const categoryIndex = TRADE_CATEGORIES.indexOf(category);
         if (categoryIndex === -1) return;
 
