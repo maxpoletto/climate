@@ -1593,7 +1593,7 @@ function updateProductionChart(minDate, maxDate) {
     const aggregatedData = aggregateByTimeUnit(currentUnit);
     const datasets = [];
 
-    [...appState.selectedProductionCategories].reverse().forEach((category, index) => {
+    [...appState.selectedProductionCategories].forEach((category, index) => {
         const categoryIndex = PRODUCTION_CATEGORIES.indexOf(category);
         if (categoryIndex === -1) return;
 
