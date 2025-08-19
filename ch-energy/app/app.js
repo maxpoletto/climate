@@ -1721,7 +1721,8 @@ function createTradeChart() {
                     title: {
                         display: true,
                         text: 'Date'
-                    }
+                    },
+                    stacked: true
                 },
                 y: {
                     title: {
@@ -1729,7 +1730,8 @@ function createTradeChart() {
                         text: 'Net Import/Export (GWh)'
                     },
                     // Center the y-axis at 0 for import/export visualization
-                    beginAtZero: false
+                    beginAtZero: false,
+                    stacked: true
                 }
             },
             datasets: {
@@ -1875,19 +1877,60 @@ function updateTradeChart(minDate, maxDate) {
         const categoryIndex = TRADE_CATEGORIES.indexOf(category);
         if (categoryIndex === -1) return;
 
-        const data = aggregatedData.map(record => ({
-            x: record.date,
-            // Net import: imports - exports (positive = net import, negative = net export)
-            y: (record.trade[categoryIndex] - record.trade[categoryIndex + 4]) / 1000 // Convert MWh to GWh
-        }));
+        const color = TRADE_CATEGORY_COLORS[category];
 
-        datasets.push({
-            label: category,
-            data: data,
-            backgroundColor: `rgba(${TRADE_CATEGORY_COLORS[category].join(',')}, 0.8)`,
-            borderColor: `rgb(${TRADE_CATEGORY_COLORS[category].join(',')})`,
-            borderWidth: 1
+        // Process data in a single pass for efficiency
+        const importData = [];
+        const exportData = [];
+
+        aggregatedData.forEach(record => {
+            const netTrade = (record.trade[categoryIndex] - record.trade[categoryIndex + 4]) / 1000; // Convert MWh to GWh
+
+            if (netTrade > 0) {
+                // Net import - add to import dataset
+                importData.push({
+                    x: record.date,
+                    y: netTrade
+                });
+            } else if (netTrade < 0) {
+                // Net export - add to export dataset
+                exportData.push({
+                    x: record.date,
+                    y: netTrade
+                });
+            }
+            // Skip if netTrade === 0
         });
+
+        // Add import dataset (positive stack) - only if there are data points
+        if (importData.length > 0) {
+            datasets.push({
+                label: `${category} (Import)`,
+                data: importData,
+                backgroundColor: `rgba(${color.join(',')}, 0.6)`,
+                borderColor: `rgb(${color.join(',')})`,
+                borderWidth: 1,
+                fill: 'origin',
+                stack: 'positive',
+                pointRadius: 0,
+                pointHoverRadius: 3
+            });
+        }
+
+        // Add export dataset (negative stack) - only if there are data points
+        if (exportData.length > 0) {
+            datasets.push({
+                label: `${category} (Export)`,
+                data: exportData,
+                backgroundColor: `rgba(${color.join(',')}, 0.4)`,
+                borderColor: `rgb(${color.join(',')})`,
+                borderWidth: 1,
+                fill: 'origin',
+                stack: 'negative',
+                pointRadius: 0,
+                pointHoverRadius: 3
+            });
+        }
     });
 
     tradeChart.data.datasets = datasets;
