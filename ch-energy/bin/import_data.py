@@ -7,13 +7,14 @@ from the Swiss Federal Office of Energy and outputs compressed JSON files for
 the web app.
 
 Basic usage:
-    python import_production_data.py --dest_root .
+    python import_data.py --dest_root .
 
 Downloaded files are stored in /tmp/ch-energy/downloads.
 
 Output files:
 - $DEST_ROOT/data/facilities.json.gz (facilities with GPS coordinates and essential fields only)
 - $DEST_ROOT/data/production.json.gz (historical production data)
+- $DEST_ROOT/data/trade.json.gz (trade data)
 """
 
 import argparse
@@ -42,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 FACILITIES_URL = "https://data.geo.admin.ch/ch.bfe.elektrizitaetsproduktionsanlagen/csv/2056/ch.bfe.elektrizitaetsproduktionsanlagen.zip"  # noqa: E501
 PRODUCTION_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv"  # noqa
+TRADE_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/107/ogd107_strom_import_export.csv"  # noqa
 DOWNLOAD_PATH = "/tmp/ch-energy/downloads"
 
 # Position of energy source in output array (input file is in German)
@@ -62,6 +64,18 @@ PRODUCTION_SOURCE_NAMES = [
     'Thermal',
     'Wind'
 ]
+
+# Position of trade flows in output array
+TRADE_FLOW_INDEX = {
+    'AT_CH_MWh': 0,      # Austria to Switzerland
+    'DE_CH_MWh': 1,      # Germany to Switzerland
+    'FR_CH_MWh': 2,      # France to Switzerland
+    'IT_CH_MWh': 3,      # Italy to Switzerland
+    'CH_AT_MWh': 4,      # Switzerland to Austria
+    'CH_DE_MWh': 5,      # Switzerland to Germany
+    'CH_FR_MWh': 6,      # Switzerland to France
+    'CH_IT_MWh': 7       # Switzerland to Italy
+}
 
 # Fields to keep from facilities data
 REQUIRED_FIELDS = [
@@ -194,16 +208,16 @@ def download_facilities():
         logger.error("Failed to extract ZIP file: %s", e)
         raise
 
-def download_production():
-    """Download historical production data."""
-    logger.info("Downloading production data from %s", PRODUCTION_URL)
+def download_csv(url: str, data_type: str) -> str:
+    """Download CSV data from URL."""
+    logger.info("Downloading %s data from %s", data_type, url)
 
     try:
-        response = requests.get(PRODUCTION_URL, timeout=60)
+        response = requests.get(url, timeout=60)
         response.raise_for_status()
 
         timestamp = datetime.now().strftime("%Y%m%d") # Data changes at most once a day.
-        csv_filename = os.path.join(DOWNLOAD_PATH, f"production_{timestamp}.csv")
+        csv_filename = os.path.join(DOWNLOAD_PATH, f"{data_type}_{timestamp}.csv")
         with open(csv_filename, 'w', encoding='utf-8') as f:
             f.write(response.text)
 
@@ -353,6 +367,37 @@ def import_production(csv_content : str) -> list[dict]:
     logger.info("Generated data for %s days", len(result))
     return result
 
+def import_trade(csv_content: str) -> list[dict]:
+    """Import trade data from CSV file."""
+    logger.info("Importing trade data...")
+
+    result = []
+    processed_rows = 0
+    csv_reader = csv.DictReader(csv_content.splitlines())
+    
+    for row in csv_reader:
+        try:
+            datetime_str = row['Datetime']
+            
+            # Create trade flows array in the specified order
+            trade_flows = [0.0] * 8
+            for field, index in TRADE_FLOW_INDEX.items():
+                if field in row:
+                    trade_flows[index] = float(row[field])
+            
+            result.append({
+                'date': datetime_str,
+                'trade': trade_flows
+            })
+            processed_rows += 1
+
+        except (KeyError, ValueError) as e:
+            logger.warning("Error processing trade row: %s: %s", row, e)
+            continue
+
+    logger.info("Processed %s trade data points", processed_rows)
+    return result
+
 def save_compressed_json(data : list[dict], output_file : str):
     """Save data as compressed JSON using atomic write."""
     json_str = json.dumps(data, separators=(',', ':'))
@@ -382,7 +427,7 @@ def save_compressed_json(data : list[dict], output_file : str):
             os.unlink(temp_path)
         raise e
 
-def print_summary(facilities_data : list[dict], production_data : list[dict]):
+def print_summary(facilities_data : list[dict], production_data : list[dict], trade_data : list[dict] = None):
     """Print summary statistics."""
     print("\nData Import Summary:")
 
@@ -422,6 +467,14 @@ def print_summary(facilities_data : list[dict], production_data : list[dict]):
         for i, (name, total) in enumerate(zip(PRODUCTION_SOURCE_NAMES, totals)):
             print(f"    {name}: {total:.1f} GWh")
 
+    if trade_data:
+        start_date = trade_data[0]['date']
+        end_date = trade_data[-1]['date']
+
+        print("\nTrade Data:")
+        print(f"  Date range: {start_date} to {end_date}")
+        print(f"  Total hours: {len(trade_data):,}")
+
 def main():
     parser = argparse.ArgumentParser(description='Import Swiss energy facilities and production data')
     parser.add_argument('--dest_root', default='.', help='Root directory for output files')
@@ -429,15 +482,17 @@ def main():
     parser.add_argument('--summary', action='store_true', help='Show data summary after processing')
     parser.add_argument('--facilities-only', action='store_true', help='Only process facilities data')
     parser.add_argument('--production-only', action='store_true', help='Only process production data')
+    parser.add_argument('--trade-only', action='store_true', help='Only process trade data')
     args = parser.parse_args()
 
     ensure_directories(args.dest_root)
 
     facilities_data = []
     production_data = []
+    trade_data = []
 
     # Import facilities data
-    if not args.production_only:
+    if not args.production_only and not args.trade_only:
         csv_path = download_facilities()
         facilities_data = import_facilities(csv_path, Geocoder(args.geocode_cache))
 
@@ -448,8 +503,8 @@ def main():
             )
 
     # Import production data
-    if not args.facilities_only:
-        csv_content = download_production()
+    if not args.facilities_only and not args.trade_only:
+        csv_content = download_csv(PRODUCTION_URL, "production")
         production_data = import_production(csv_content)
 
         if production_data:
@@ -458,8 +513,19 @@ def main():
                 os.path.join(args.dest_root, 'data', 'production.json.gz'),
             )
 
+    # Import trade data
+    if not args.facilities_only and not args.production_only:
+        csv_content = download_csv(TRADE_URL, "trade")
+        trade_data = import_trade(csv_content)
+
+        if trade_data:
+            save_compressed_json(
+                trade_data,
+                os.path.join(args.dest_root, 'data', 'trade.json.gz'),
+            )
+
     if args.summary:
-        print_summary(facilities_data, production_data)
+        print_summary(facilities_data, production_data, trade_data)
 
     # Write last update timestamp
     last_update_file = os.path.join(args.dest_root, 'data', 'last-update.txt')
