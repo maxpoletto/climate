@@ -3,7 +3,7 @@ setup-cron remove-cron clean clean-docker clean-all
 
 ROOT_PATH = app
 DATA_PATH = $(ROOT_PATH)/data
-JSON_FILES = $(DATA_PATH)/facilities.json $(DATA_PATH)/production.json
+JSON_FILES = $(DATA_PATH)/facilities.json $(DATA_PATH)/production.json $(DATA_PATH)/trade.json
 GZ_FILES = $(JSON_FILES:.json=.json.gz)
 
 all:
