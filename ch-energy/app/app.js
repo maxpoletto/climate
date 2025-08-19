@@ -1298,6 +1298,7 @@ function callbackProductionCategories(e) {
     }
     fresh.production = false;
     updateProductionChart();
+    updateProductionCategories();
     serializeStateToURL();
 }
 
@@ -1319,54 +1320,6 @@ function callbackProductionZoom(chart) {
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
     appState.productionChart.xmin = chart.scales.x.min;
     appState.productionChart.xmax = chart.scales.x.max;
-    serializeStateToURL();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Trade mode
-///////////////////////////////////////////////////////////////////////////////
-
-function callbackTradeCategories(e) {
-    const allCheckbox = document.getElementById('trade-cat-select-all');
-    if (e.target.type !== 'checkbox') { return; }
-    const checked = e.target.checked;
-    if (e.target.id === allCheckbox.id) {
-        // Select/deselect all
-        document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]').forEach(cb => {
-            if (cb.id !== allCheckbox.id) cb.checked = checked;
-        });
-        appState.selectedTradeCategories = checked ? [...TRADE_CATEGORIES] : [];
-    } else {
-        appState.selectedTradeCategories = Array
-            .from(document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]:not(#trade-cat-select-all):checked'))
-            .map(cb => cb.value);
-        // Sync select-all checkbox
-        const allChecked = appState.selectedTradeCategories.length === TRADE_CATEGORIES.length;
-        allCheckbox.checked = allChecked;
-    }
-    fresh.trade = false;
-    updateTradeChart();
-    serializeStateToURL();
-}
-
-function callbackTradeResetZoom() {
-    tradeChart.resetZoom();
-}
-
-function callbackTradePan(chart) {
-    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
-    appState.tradeChart.xmin = chart.scales.x.min;
-    appState.tradeChart.xmax = chart.scales.x.max;
-    serializeStateToURL();
-}
-
-function callbackTradeZoom(chart) {
-    fresh.trade = false;
-    updateTradeTimeUnit(chart);
-    updateTradeChart(chart.scales.x.min, chart.scales.x.max);
-    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
-    appState.tradeChart.xmin = chart.scales.x.min;
-    appState.tradeChart.xmax = chart.scales.x.max;
     serializeStateToURL();
 }
 
@@ -1531,13 +1484,15 @@ function updateProductionCategories(minDate, maxDate) {
         count++;
     });
 
+    let total = 0;
     PRODUCTION_CATEGORIES.forEach((category, index) => {
-        const avgElement = document.getElementById(`prod-avg-${index}`);
-        if (avgElement) {
-            const avg = totals[index] / count;
-            avgElement.textContent = avg.toFixed(1);
+        const avg = totals[index] / count;
+        document.getElementById(`prod-avg-${index}`).textContent = avg.toFixed(1);
+        if (appState.selectedProductionCategories.includes(category)) {
+            total += avg;
         }
     });
+    document.getElementById('totalProduction').textContent = total.toFixed(1);
 }
 
 function updateProductionChart(minDate, maxDate) {
@@ -1632,6 +1587,55 @@ function updateProductionChart(minDate, maxDate) {
     productionChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
     productionChart.update();
     fresh.production = true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Trade mode
+///////////////////////////////////////////////////////////////////////////////
+
+function callbackTradeCategories(e) {
+    const allCheckbox = document.getElementById('trade-cat-select-all');
+    if (e.target.type !== 'checkbox') { return; }
+    const checked = e.target.checked;
+    if (e.target.id === allCheckbox.id) {
+        // Select/deselect all
+        document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]').forEach(cb => {
+            if (cb.id !== allCheckbox.id) cb.checked = checked;
+        });
+        appState.selectedTradeCategories = checked ? [...TRADE_CATEGORIES] : [];
+    } else {
+        appState.selectedTradeCategories = Array
+            .from(document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]:not(#trade-cat-select-all):checked'))
+            .map(cb => cb.value);
+        // Sync select-all checkbox
+        const allChecked = appState.selectedTradeCategories.length === TRADE_CATEGORIES.length;
+        allCheckbox.checked = allChecked;
+    }
+    fresh.trade = false;
+    updateTradeChart();
+    updateTradeCategories();
+    serializeStateToURL();
+}
+
+function callbackTradeResetZoom() {
+    tradeChart.resetZoom();
+}
+
+function callbackTradePan(chart) {
+    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
+    appState.tradeChart.xmin = chart.scales.x.min;
+    appState.tradeChart.xmax = chart.scales.x.max;
+    serializeStateToURL();
+}
+
+function callbackTradeZoom(chart) {
+    fresh.trade = false;
+    updateTradeTimeUnit(chart);
+    updateTradeChart(chart.scales.x.min, chart.scales.x.max);
+    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
+    appState.tradeChart.xmin = chart.scales.x.min;
+    appState.tradeChart.xmax = chart.scales.x.max;
+    serializeStateToURL();
 }
 
 function createTradeChart() {
@@ -1799,13 +1803,16 @@ function updateTradeCategories(minDate, maxDate) {
         count++;
     });
 
+    let total = 0;
     TRADE_CATEGORIES.forEach((category, index) => {
-        const netElement = document.getElementById(`trade-net-${index}`);
-        if (netElement) {
-            const avgNet = totals[index] / (count / 24); // Convert to daily average
-            netElement.textContent = avgNet.toFixed(1);
+        const avgNet = totals[index] / (count / 24); // Convert to daily average
+        document.getElementById(`trade-net-${index}`).textContent = avgNet.toFixed(1);
+        console.log('category', category, 'avgNet', avgNet, 'appState.selectedTradeCategories', appState.selectedTradeCategories);
+        if (appState.selectedTradeCategories.includes(category)) {
+            total += avgNet;
         }
     });
+    document.getElementById('totalTrade').textContent = total.toFixed(1);
 }
 
 function updateTradeChart(minDate, maxDate) {
