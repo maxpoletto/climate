@@ -2,6 +2,13 @@
 // Constants
 ///////////////////////////////////////////////////////////////////////////////
 
+// Application modes enum
+const AppMode = {
+    FACILITIES: 1,
+    PRODUCTION: 2,
+    TRADE: 3
+};
+
 // Color palette for different categories
 const FACILITIES_CATEGORY_COLORS = {
     'Photovoltaic': [255, 193, 7],         // Amber/Yellow - solar
@@ -101,7 +108,7 @@ let tradeChart = null;           // Chart.js instance for trade
 // Global state object
 const appState = {
     // Top-level toggle between modes
-    currentMode: 'facilities', // 'facilities', 'production', or 'trade'
+    currentMode: AppMode.FACILITIES, // AppMode.FACILITIES, AppMode.PRODUCTION, or AppMode.TRADE
 
     // Facilities mode state
     isTableView: false,
@@ -188,12 +195,8 @@ function deserializeStateFromURL() {
             console.warn('Invalid state');
             return;
         }
-        // Handle legacy isProductionMode or new currentMode
         if (state.currentMode !== undefined) {
             appState.currentMode = state.currentMode;
-        } else if (state.isProductionMode !== undefined) {
-            // Legacy support
-            appState.currentMode = state.isProductionMode ? 'production' : 'facilities';
         }
         if (state.isTableView !== undefined) {
             appState.isTableView = state.isTableView;
@@ -679,10 +682,10 @@ function initializeUI() {
 
     // Initialize the correct mode
     switch (appState.currentMode) {
-        case 'production':
+        case AppMode.PRODUCTION:
             modeProduction();
             break;
-        case 'trade':
+        case AppMode.TRADE:
             modeTrade();
             break;
         default:
@@ -757,22 +760,22 @@ function setupEventHandlers() {
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackModeFacilities() {
-    if (appState.currentMode === 'facilities') { return; }
-    appState.currentMode = 'facilities';
+    if (appState.currentMode === AppMode.FACILITIES) { return; }
+    appState.currentMode = AppMode.FACILITIES;
     modeFacilities();
     serializeStateToURL();
 }
 
 function callbackModeProduction() {
-    if (appState.currentMode === 'production') { return; }
-    appState.currentMode = 'production';
+    if (appState.currentMode === AppMode.PRODUCTION) { return; }
+    appState.currentMode = AppMode.PRODUCTION;
     modeProduction();
     serializeStateToURL();
 }
 
 function callbackModeTrade() {
-    if (appState.currentMode === 'trade') { return; }
-    appState.currentMode = 'trade';
+    if (appState.currentMode === AppMode.TRADE) { return; }
+    appState.currentMode = AppMode.TRADE;
     modeTrade();
     serializeStateToURL();
 }
