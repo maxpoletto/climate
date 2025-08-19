@@ -1554,6 +1554,7 @@ function updateProductionChart(minDate, maxDate) {
     [...appState.selectedProductionCategories].forEach((category, index) => {
         const categoryIndex = PRODUCTION_CATEGORIES.indexOf(category);
         if (categoryIndex === -1) return;
+        const color = PRODUCTION_CATEGORY_COLORS[category] || [128, 128, 128];
 
         const data = aggregatedData.map(record => ({
             x: record.date,
@@ -1563,8 +1564,8 @@ function updateProductionChart(minDate, maxDate) {
         datasets.push({
             label: category,
             data: data,
-            backgroundColor: `rgba(${PRODUCTION_CATEGORY_COLORS[category].join(',')}, 0.8)`,
-            borderColor: `rgb(${PRODUCTION_CATEGORY_COLORS[category].join(',')})`,
+            backgroundColor: `rgba(${color.join(',')}, 0.8)`,
+            borderColor: `rgb(${color.join(',')})`,
             borderWidth: 1,
             stack: 'production'
         });
@@ -1875,61 +1876,24 @@ function updateTradeChart(minDate, maxDate) {
     [...appState.selectedTradeCategories].forEach((category, index) => {
         const categoryIndex = TRADE_CATEGORIES.indexOf(category);
         if (categoryIndex === -1) return;
+        const color = TRADE_CATEGORY_COLORS[category] || [128, 128, 128];
 
-        const color = TRADE_CATEGORY_COLORS[category];
-
-        // Process data in a single pass for efficiency
-        const importData = [];
-        const exportData = [];
-
-        aggregatedData.forEach(record => {
+        const data = aggregatedData.map(record => {
             const netTrade = (record.trade[categoryIndex] - record.trade[categoryIndex + 4]) / 1000; // Convert MWh to GWh
-
-            if (netTrade > 0) {
-                // Net import - add to import dataset
-                importData.push({
-                    x: record.date,
-                    y: netTrade
-                });
-            } else if (netTrade < 0) {
-                // Net export - add to export dataset
-                exportData.push({
-                    x: record.date,
-                    y: netTrade
-                });
-            }
-            // Skip if netTrade === 0
+            return {
+                x: record.date,
+                y: netTrade
+            };
         });
 
-        // Add import dataset (positive stack) - only if there are data points
-        if (importData.length > 0) {
-            datasets.push({
-                label: `${category} (Import)`,
-                data: importData,
-                backgroundColor: `rgba(${color.join(',')}, 0.6)`,
-                borderColor: `rgb(${color.join(',')})`,
-                borderWidth: 1,
-                fill: 'origin',
-                stack: 'positive',
-                pointRadius: 0,
-                pointHoverRadius: 3
-            });
-        }
-
-        // Add export dataset (negative stack) - only if there are data points
-        if (exportData.length > 0) {
-            datasets.push({
-                label: `${category} (Export)`,
-                data: exportData,
-                backgroundColor: `rgba(${color.join(',')}, 0.4)`,
-                borderColor: `rgb(${color.join(',')})`,
-                borderWidth: 1,
-                fill: 'origin',
-                stack: 'negative',
-                pointRadius: 0,
-                pointHoverRadius: 3
-            });
-        }
+        datasets.push({
+            label: `${category}`,
+            data: data,
+            backgroundColor: `rgba(${color.join(',')}, 0.8)`,
+            borderColor: `rgb(${color.join(',')})`,
+            borderWidth: 1,
+            stack: 'trade'
+        });
     });
 
     tradeChart.data.datasets = datasets;
