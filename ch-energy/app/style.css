@@ -11,7 +11,7 @@ body {
 
 #map {
     position: absolute;
-    top: 0;
+    top: 40px;
     bottom: 0;
     width: 100%;
 }
@@ -22,7 +22,7 @@ body {
 
 #controls {
     position: absolute;
-    top: 10px;
+    top: 50px;
     right: 10px;
     background: white;
     padding: 15px;
@@ -315,9 +315,57 @@ body {
     display: none;
 }
 
+/* Tab navigation styles */
+.tab-navigation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: flex-end;
+    padding: 0 10px;
+    z-index: 1000;
+}
+
+.tab-button {
+    padding: 8px 24px 8px 24px;
+    background: #e9ecef;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    border-bottom: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    margin-right: 2px;
+    position: relative;
+    top: 1px;
+}
+
+.tab-button:hover:not(.active) {
+    background: #f8f9fa;
+    color: #212529;
+}
+
+.tab-button.active {
+    background: white;
+    color: #212529;
+    border-color: #dee2e6;
+    box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tab-button.active:hover {
+    background: white;
+}
+
 .info-button {
     position: fixed;
-    top: 15px;
+    top: 55px;
     left: 15px;
     width: 36px;
     height: 36px;
@@ -423,7 +471,7 @@ body {
 /* Table view styles */
 #tableView {
     position: absolute;
-    top: 0;
+    top: 40px;
     bottom: 0;
     left: 0;
     right: 320px;
@@ -660,7 +708,7 @@ body {
 /* Production view styles */
 #productionView {
     position: absolute;
-    top: 0;
+    top: 40px;
     bottom: 0;
     left: 0;
     right: 320px;
@@ -688,7 +736,7 @@ body {
 
 .chart-controls {
     position: fixed;
-    top: 15px;
+    top: 55px;
     left: 65px;
     /* Start after the info button */
     right: 320px;
@@ -741,39 +789,7 @@ body {
     -ms-user-select: none;
 }
 
-.mode-toggle-group {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
-}
 
-.mode-toggle-btn {
-    width: 50%;
-    padding: 8px;
-    background: #f5f5f5;
-    color: #333;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: all 0.3s;
-    margin-bottom: 8px;
-}
-
-.mode-toggle-btn:hover:not(.active) {
-    background: #e8e8e8;
-}
-
-.mode-toggle-btn.active {
-    background: #2196F3;
-    color: white;
-    border-color: #1976D2;
-}
-
-.mode-toggle-btn.active:hover {
-    background: #1976D2;
-}
 
 .production-controls {
     display: none;

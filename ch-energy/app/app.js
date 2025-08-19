@@ -261,7 +261,7 @@ function initializeDeckGL() {
                 style: {
                     // Style to center-align with help button.
                     position: 'fixed',
-                    top: '70px',
+                    top: '110px',
                     left: '19px',
                     padding: '0px',
                     margin: '0px',
@@ -274,7 +274,7 @@ function initializeDeckGL() {
                 style: {
                     // Style to center-align with help button.
                     position: 'fixed',
-                    top: '110px',
+                    top: '150px',
                     left: '19px',
                     padding: '0px',
                     margin: '0px',
@@ -586,11 +586,11 @@ function setupEventHandlers() {
     setupTableEventHandlers();
     setupInfoModalHandlers();
 
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    facilitiesBtn.addEventListener('click', callbackModeFacilities);
+    const facilitiesTab = document.getElementById('facilitiesTab');
+    facilitiesTab.addEventListener('click', callbackModeFacilities);
 
-    const productionBtn = document.getElementById('productionMode');
-    productionBtn.addEventListener('click', callbackModeProduction);
+    const productionTab = document.getElementById('productionTab');
+    productionTab.addEventListener('click', callbackModeProduction);
 
     const viewToggle = document.getElementById('viewToggle');
     viewToggle.addEventListener('click', callbackFacilitiesViewToggle);
@@ -627,10 +627,10 @@ function callbackModeProduction() {
 }
 
 function modeFacilities() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.add('active');
-    productionBtn.classList.remove('active');
+    const facilitiesTab = document.getElementById('facilitiesTab');
+    const productionTab = document.getElementById('productionTab');
+    facilitiesTab.classList.add('active');
+    productionTab.classList.remove('active');
 
     // Show facilities controls, hide production controls
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
@@ -644,10 +644,10 @@ function modeFacilities() {
 }
 
 function modeProduction() {
-    const facilitiesBtn = document.getElementById('facilitiesMode');
-    const productionBtn = document.getElementById('productionMode');
-    facilitiesBtn.classList.remove('active');
-    productionBtn.classList.add('active');
+    const facilitiesTab = document.getElementById('facilitiesTab');
+    const productionTab = document.getElementById('productionTab');
+    facilitiesTab.classList.remove('active');
+    productionTab.classList.add('active');
 
     // Annotation here is just the last update date
     document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
