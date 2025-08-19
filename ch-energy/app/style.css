@@ -718,7 +718,27 @@ body {
     display: none;
 }
 
+/* Trade view styles */
+#tradeView {
+    position: absolute;
+    top: 40px;
+    bottom: 0;
+    left: 0;
+    right: 320px;
+    /* Leave space for controls panel */
+    background: white;
+    overflow: hidden;
+    display: none;
+}
+
 #productionContainer {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    margin-top: 40px;
+}
+
+#tradeContainer {
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -789,6 +809,21 @@ body {
     -ms-user-select: none;
 }
 
+#tradeChartContainer {
+    flex: 1;
+    padding: 20px;
+    overflow: hidden;
+}
+
+#tradeChart {
+    width: 100% !important;
+    height: 100% !important;
+    user-select: none;
+    -moz-user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+
 
 
 .production-controls {
@@ -796,6 +831,14 @@ body {
 }
 
 .production-controls.active {
+    display: block;
+}
+
+.trade-controls {
+    display: none;
+}
+
+.trade-controls.active {
     display: block;
 }
 

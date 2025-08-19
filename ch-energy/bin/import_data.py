@@ -374,17 +374,17 @@ def import_trade(csv_content: str) -> list[dict]:
     result = []
     processed_rows = 0
     csv_reader = csv.DictReader(csv_content.splitlines())
-    
+
     for row in csv_reader:
         try:
             datetime_str = row['Datetime']
-            
+
             # Create trade flows array in the specified order
             trade_flows = [0.0] * 8
             for field, index in TRADE_FLOW_INDEX.items():
                 if field in row:
                     trade_flows[index] = float(row[field])
-            
+
             result.append({
                 'date': datetime_str,
                 'trade': trade_flows

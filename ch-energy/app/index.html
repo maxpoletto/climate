@@ -47,6 +47,7 @@
     <div id="tabNavigation" class="tab-navigation">
         <button id="facilitiesTab" class="tab-button active">⚙️ Facilities</button>
         <button id="productionTab" class="tab-button">⚡ Production</button>
+        <button id="tradeTab" class="tab-button">🔄 Import/Export</button>
     </div>
 
     <button class="info-button" id="infoButton">?</button>
@@ -109,6 +110,20 @@
             </div>
         </div>
     </div>
+    <div id="tradeView">
+        <div class="chart-controls">
+            <span class="chart-help">
+                Zoom: mouse wheel or pinch or -/_/+/= keys • Pan: tap/click + drag or arrow keys.<br/>
+                Bars adapt: daily→weekly→monthly→quarterly
+            </span>
+            <button id="resetTradeZoom" class="reset-zoom-btn">Reset Zoom</button>
+        </div>
+        <div id="tradeContainer">
+            <div id="tradeChartContainer">
+                <canvas id="tradeChart"></canvas>
+            </div>
+        </div>
+    </div>
     <div id="controls">
         <div class="control-section facilities-controls">
             <button id="viewToggle" class="view-toggle-btn">📊 Table View</button>
@@ -163,6 +178,20 @@
                 </tbody>
             </table>
         </div>
+        <div class="control-section trade-controls">
+            <h3>Countries</h3>
+            <table id="tradeCategoryTable" class="category-table">
+                <thead>
+                    <tr>
+                        <th>Country</th>
+                        <th>Mean Net Import<br/>GWh/day</th>
+                    </tr>
+                </thead>
+                <tbody id="tradeCategoryTableBody">
+                    <!-- Table rows will be populated dynamically -->
+                </tbody>
+            </table>
+        </div>
         <div class="annotations" id="annotations"></div>
     </div>
 
@@ -175,8 +204,8 @@
 
             <h4>Instructions</h4>
             <ul>
-                <li><strong>Facilities / Production mode tabs</strong>
-                    <p>Click the <strong>Facilities</strong> or <strong>Production</strong> tab at the top to switch between facilities and production mode.</p>
+                <li><strong>Mode tabs</strong>
+                    <p>Click the <strong>Facilities</strong>, <strong>Production</strong>, or <strong>Import/Export</strong> tab at the top to switch between different views of Switzerland's energy data.</p>
                 </li>
                 <li><strong>Table / Map view toggle</strong>
                     <p>Within facilities mode, click <strong>Table View</strong> to switch from map to table, or <strong>Map View</strong> to switch from table to map.</p>
@@ -206,6 +235,9 @@
                     <p>Zoom: mouse wheel or pinch or -/_/+/= keys. Pan: tap/click + drag or arrow keys. Summary statistics in the sources panel update as you move around.
                         Bars rescale (quarters → months → weeks → days) as you zoom in.</p>
                     <p>Hover over any bar to see details for the corresponding time period.</p>
+                </li>
+                <li><strong>Import/Export mode</strong>
+                    <p>Shows Switzerland's electricity trade with neighboring countries (Austria, Germany, France, Italy) from 2017 onwards. Positive values represent net imports, negative values represent net exports. The chart adapts granularity (daily → weekly → monthly → quarterly) based on zoom level.</p>
                 </li>
             </ul>
 

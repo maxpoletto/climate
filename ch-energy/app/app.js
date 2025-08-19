@@ -27,6 +27,7 @@ const PRODUCTION_CATEGORY_COLORS = {
 
 // Time unit names for production chart title
 const TIME_UNIT_NAMES = {
+    'hour': 'Hourly',
     'day': 'Daily',
     'week': 'Weekly',
     'month': 'Monthly',
@@ -42,6 +43,22 @@ const PRODUCTION_CATEGORIES = [
     'Thermal',
     'Wind'
 ];
+
+// Trade categories (countries Switzerland trades with)
+const TRADE_CATEGORIES = [
+    'Austria',
+    'Germany',
+    'France',
+    'Italy'
+];
+
+// Color palette for trade categories (countries)
+const TRADE_CATEGORY_COLORS = {
+    'Austria': [244, 67, 54],       // Red
+    'Germany': [255, 193, 7],       // Amber
+    'France': [33, 150, 243],       // Blue
+    'Italy': [76, 175, 80]          // Green
+};
 
 const TABLE_COLUMNS = ["SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps"];
 const TABLE_NUM_ROWS = 50;       // Show 50 facilities per page
@@ -61,7 +78,8 @@ let isInitializing = true;       // Flag to prevent nouiSlider callbacks from be
 let fresh = {
     table: false,
     map: false,
-    production: false
+    production: false,
+    trade: false
 };
 
 let facilities = {
@@ -76,10 +94,14 @@ let facilities = {
 let productionData = [];         // Historical production data
 let productionChart = null;      // Chart.js instance
 
+// Trade data state
+let tradeData = [];              // Historical trade data
+let tradeChart = null;           // Chart.js instance for trade
+
 // Global state object
 const appState = {
-    // Top-level toggle, facilities vs production mode
-    isProductionMode: false,
+    // Top-level toggle between modes
+    currentMode: 'facilities', // 'facilities', 'production', or 'trade'
 
     // Facilities mode state
     isTableView: false,
@@ -93,6 +115,9 @@ const appState = {
     // Production mode state
     selectedProductionCategories: null,
 
+    // Trade mode state
+    selectedTradeCategories: null,
+
     // Map view state
     mapView: {
         latitude: 46.8182,
@@ -103,6 +128,12 @@ const appState = {
     // Production chart state
     productionChart: {
         xmin: new Date('2015-01-01').getTime(),
+        xmax: Infinity
+    },
+
+    // Trade chart state
+    tradeChart: {
+        xmin: new Date('2017-01-01').getTime(), // Trade data starts from 2017
         xmax: Infinity
     }
 };
@@ -157,8 +188,12 @@ function deserializeStateFromURL() {
             console.warn('Invalid state');
             return;
         }
-        if (state.isProductionMode !== undefined) {
-            appState.isProductionMode = state.isProductionMode;
+        // Handle legacy isProductionMode or new currentMode
+        if (state.currentMode !== undefined) {
+            appState.currentMode = state.currentMode;
+        } else if (state.isProductionMode !== undefined) {
+            // Legacy support
+            appState.currentMode = state.isProductionMode ? 'production' : 'facilities';
         }
         if (state.isTableView !== undefined) {
             appState.isTableView = state.isTableView;
@@ -183,6 +218,10 @@ function deserializeStateFromURL() {
             appState.selectedProductionCategories = state.selectedProductionCategories
                 .filter(c => typeof c === 'string' && PRODUCTION_CATEGORIES.includes(c));
         }
+        if (Array.isArray(state.selectedTradeCategories)) {
+            appState.selectedTradeCategories = state.selectedTradeCategories
+                .filter(c => typeof c === 'string' && TRADE_CATEGORIES.includes(c));
+        }
         if (state.mapView && typeof state.mapView === 'object') {
             decodeFloat(state.mapView.latitude, (val) => appState.mapView.latitude = val, -90, 90);
             decodeFloat(state.mapView.longitude, (val) => appState.mapView.longitude = val, -180, 180);
@@ -191,6 +230,10 @@ function deserializeStateFromURL() {
         if (state.productionChart && typeof state.productionChart === 'object') {
             decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val, 0);
             decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val, appState.productionChart.xmin);
+        }
+        if (state.tradeChart && typeof state.tradeChart === 'object') {
+            decodeFloat(state.tradeChart.xmin, (val) => appState.tradeChart.xmin = val, 0);
+            decodeFloat(state.tradeChart.xmax, (val) => appState.tradeChart.xmax = val, appState.tradeChart.xmin);
         }
     } catch (error) {
         console.warn('Failed to deserialize state from URL:', error);
@@ -329,6 +372,16 @@ async function loadData() {
             d.date = new Date(year, month - 1, day); // Parse as local time.
         });
 
+        // Download trade data.
+        const tradeResponse = await fetch(`data/trade.json?v=${ts}`);
+        if (!tradeResponse.ok) {
+            throw new Error(`Failed to load trade data: ${tradeResponse.status} ${tradeResponse.statusText}`);
+        }
+        tradeData = await tradeResponse.json();
+        tradeData.map(d => {
+            d.date = new Date(d.date); // Parse ISO datetime string
+        });
+
         // Download last update time.
         const updateResponse = await fetch(`data/last-update.txt?v=${ts}`);
         if (updateResponse.ok) {
@@ -349,12 +402,17 @@ async function loadData() {
             // Initialize with all facilities categories on first load (=== null)
             appState.selectedFacilitiesCategories = [...facilities.categories];
         }
+        if (appState.selectedTradeCategories === null) {
+            // Initialize with all trade categories on first load (=== null)
+            appState.selectedTradeCategories = [...TRADE_CATEGORIES];
+        }
 
         // Hide loading overlay after successful data load
         document.getElementById('loadingOverlay').style.display = 'none';
 
         console.log(`Loaded ${facilities.all.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
         console.log(`Loaded ${productionData.length} days of production data`);
+        console.log(`Loaded ${tradeData.length} hours of trade data`);
     } catch (error) {
         console.error('Error loading data:', error);
 
@@ -530,10 +588,73 @@ function initializeUI() {
         });
     }
 
+    function _renderTradeCheckboxes() {
+        const container = document.getElementById('tradeCategoryTableBody');
+        container.innerHTML = '';
+
+        // Select/Deselect all checkbox
+        const allCheckbox = document.createElement('input');
+        allCheckbox.type = 'checkbox';
+        allCheckbox.className = 'category-checkbox';
+        allCheckbox.id = 'trade-cat-select-all';
+        allCheckbox.checked = appState.selectedTradeCategories.length === TRADE_CATEGORIES.length;
+        const allLabel = document.createElement('label');
+        allLabel.htmlFor = 'trade-cat-select-all';
+        allLabel.textContent = 'Select/Deselect All';
+        const allTd = document.createElement('td');
+        allTd.colSpan = 2;
+        allTd.appendChild(allCheckbox);
+        allTd.appendChild(allLabel);
+        let tr = document.createElement('tr');
+        tr.appendChild(allTd);
+        container.appendChild(tr);
+
+        TRADE_CATEGORIES.forEach((category, index) => {
+            tr = document.createElement('tr');
+
+            // Country column with checkbox and color indicator
+            const sourceCell = document.createElement('td');
+            sourceCell.className = 'source-cell';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'category-checkbox';
+            checkbox.id = `trade-cat-${index}`;
+            checkbox.value = category;
+            checkbox.checked = appState.selectedTradeCategories.includes(category);
+
+            const label = document.createElement('label');
+            label.className = 'category-label';
+            label.htmlFor = checkbox.id;
+
+            const colorIndicator = document.createElement('span');
+            colorIndicator.className = 'color-indicator';
+            const color = TRADE_CATEGORY_COLORS[category] || [128, 128, 128];
+            colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
+
+            const text = document.createElement('span');
+            text.textContent = category;
+
+            label.appendChild(colorIndicator);
+            label.appendChild(text);
+            sourceCell.appendChild(checkbox);
+            sourceCell.appendChild(label);
+
+            // Net import column
+            const netImportCell = document.createElement('td');
+            netImportCell.className = 'count-cell';
+            netImportCell.id = `trade-net-${index}`;
+
+            tr.appendChild(sourceCell);
+            tr.appendChild(netImportCell);
+            container.appendChild(tr);
+        });
+    }
+
     _renderPowerSlider();
     _renderSearchInput();
     _renderFacilitiesCheckboxes();
     _renderProductionCheckboxes();
+    _renderTradeCheckboxes();
     setupEventHandlers();
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
     filterFacilities();
@@ -547,10 +668,26 @@ function initializeUI() {
     updateProductionTimeUnit(productionChart);
     updateProductionCategories(min, max);
 
-    if (appState.isProductionMode) {
-        modeProduction();
-    } else {
-        modeFacilities();
+    createTradeChart();
+    const tradeMin = Math.max(appState.tradeChart.xmin, new Date('2017-01-01').getTime());
+    const tradeMax = Math.min(appState.tradeChart.xmax, new Date().getTime());
+    tradeChart.options.scales.x.min = tradeMin;
+    tradeChart.options.scales.x.max = tradeMax;
+    tradeChart.update();
+    updateTradeTimeUnit(tradeChart);
+    updateTradeCategories(tradeMin, tradeMax);
+
+    // Initialize the correct mode
+    switch (appState.currentMode) {
+        case 'production':
+            modeProduction();
+            break;
+        case 'trade':
+            modeTrade();
+            break;
+        default:
+            modeFacilities();
+            break;
     }
 }
 
@@ -592,6 +729,9 @@ function setupEventHandlers() {
     const productionTab = document.getElementById('productionTab');
     productionTab.addEventListener('click', callbackModeProduction);
 
+    const tradeTab = document.getElementById('tradeTab');
+    tradeTab.addEventListener('click', callbackModeTrade);
+
     const viewToggle = document.getElementById('viewToggle');
     viewToggle.addEventListener('click', callbackFacilitiesViewToggle);
 
@@ -603,9 +743,13 @@ function setupEventHandlers() {
 
     document.getElementById('facilitiesCategoryTableBody').addEventListener('change', callbackFacilitiesCategories);
     document.getElementById('productionCategoryTableBody').addEventListener('change', callbackProductionCategories);
+    document.getElementById('tradeCategoryTableBody').addEventListener('change', callbackTradeCategories);
 
     const resetZoomBtn = document.getElementById('resetZoom');
     resetZoomBtn.addEventListener('click', callbackProductionResetZoom);
+
+    const resetTradeZoomBtn = document.getElementById('resetTradeZoom');
+    resetTradeZoomBtn.addEventListener('click', callbackTradeResetZoom);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -613,31 +757,42 @@ function setupEventHandlers() {
 ///////////////////////////////////////////////////////////////////////////////
 
 function callbackModeFacilities() {
-    if (!appState.isProductionMode) { return; }
-    appState.isProductionMode = false;
+    if (appState.currentMode === 'facilities') { return; }
+    appState.currentMode = 'facilities';
     modeFacilities();
     serializeStateToURL();
 }
 
 function callbackModeProduction() {
-    if (appState.isProductionMode) { return; }
-    appState.isProductionMode = true;
+    if (appState.currentMode === 'production') { return; }
+    appState.currentMode = 'production';
     modeProduction();
+    serializeStateToURL();
+}
+
+function callbackModeTrade() {
+    if (appState.currentMode === 'trade') { return; }
+    appState.currentMode = 'trade';
+    modeTrade();
     serializeStateToURL();
 }
 
 function modeFacilities() {
     const facilitiesTab = document.getElementById('facilitiesTab');
     const productionTab = document.getElementById('productionTab');
+    const tradeTab = document.getElementById('tradeTab');
     facilitiesTab.classList.add('active');
     productionTab.classList.remove('active');
+    tradeTab.classList.remove('active');
 
-    // Show facilities controls, hide production controls
+    // Show facilities controls, hide others
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'none');
 
-    // Hide production view
+    // Hide other views
     document.getElementById('productionView').style.display = 'none';
+    document.getElementById('tradeView').style.display = 'none';
 
     renderFacilitiesToggle();
     renderFacilities();
@@ -646,24 +801,55 @@ function modeFacilities() {
 function modeProduction() {
     const facilitiesTab = document.getElementById('facilitiesTab');
     const productionTab = document.getElementById('productionTab');
+    const tradeTab = document.getElementById('tradeTab');
     facilitiesTab.classList.remove('active');
     productionTab.classList.add('active');
+    tradeTab.classList.remove('active');
 
     // Annotation here is just the last update date
     document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
     document.getElementById('annotations').innerHTML = lastUpdate ? `Last data update: ${lastUpdate}` : '';
 
-    // Hide facilities controls, show production controls
+    // Hide other controls, show production controls
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'none');
 
-    // Show production view
+    // Show production view, hide others
     document.getElementById('map').style.display = 'none';
     document.getElementById('tableView').style.display = 'none';
     document.getElementById('productionView').style.display = 'block';
+    document.getElementById('tradeView').style.display = 'none';
 
     // Initialize or update the chart
     updateProductionChart();
+}
+
+function modeTrade() {
+    const facilitiesTab = document.getElementById('facilitiesTab');
+    const productionTab = document.getElementById('productionTab');
+    const tradeTab = document.getElementById('tradeTab');
+    facilitiesTab.classList.remove('active');
+    productionTab.classList.remove('active');
+    tradeTab.classList.add('active');
+
+    // Annotation here is just the last update date
+    document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
+    document.getElementById('annotations').innerHTML = lastUpdate ? `Last data update: ${lastUpdate}` : '';
+
+    // Hide other controls, show trade controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'block');
+
+    // Show trade view, hide others
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('productionView').style.display = 'none';
+    document.getElementById('tradeView').style.display = 'block';
+
+    // Initialize or update the chart
+    updateTradeChart();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1045,7 +1231,7 @@ function callbackPowerSlider(values, handle) {
 function filterFacilities() {
     function searchPredicate(f) {
         if (appState.searchTokens.length === 0) return true;
-    
+
         // Fields to search: Energy Source, Power, Municipality, Canton, Date started
         const searchableText = [
             f.SubCategory || '',
@@ -1055,11 +1241,11 @@ function filterFacilities() {
             'canton:' + (f.Canton || ''),
             'year:' + (f.BeginningOfOperation || '').slice(0, 4),
         ].join(' ').toLowerCase();
-    
+
         // All tokens must be found as substrings
         return appState.searchTokens.every(token => searchableText.includes(token));
     }
-    
+
     facilities.categoryStats = {};
     facilities.categories.forEach(category => {
         facilities.categoryStats[category] = { count: 0, capacity: 0 };
@@ -1133,6 +1319,54 @@ function callbackProductionZoom(chart) {
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
     appState.productionChart.xmin = chart.scales.x.min;
     appState.productionChart.xmax = chart.scales.x.max;
+    serializeStateToURL();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Trade mode
+///////////////////////////////////////////////////////////////////////////////
+
+function callbackTradeCategories(e) {
+    const allCheckbox = document.getElementById('trade-cat-select-all');
+    if (e.target.type !== 'checkbox') { return; }
+    const checked = e.target.checked;
+    if (e.target.id === allCheckbox.id) {
+        // Select/deselect all
+        document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]').forEach(cb => {
+            if (cb.id !== allCheckbox.id) cb.checked = checked;
+        });
+        appState.selectedTradeCategories = checked ? [...TRADE_CATEGORIES] : [];
+    } else {
+        appState.selectedTradeCategories = Array
+            .from(document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]:not(#trade-cat-select-all):checked'))
+            .map(cb => cb.value);
+        // Sync select-all checkbox
+        const allChecked = appState.selectedTradeCategories.length === TRADE_CATEGORIES.length;
+        allCheckbox.checked = allChecked;
+    }
+    fresh.trade = false;
+    updateTradeChart();
+    serializeStateToURL();
+}
+
+function callbackTradeResetZoom() {
+    tradeChart.resetZoom();
+}
+
+function callbackTradePan(chart) {
+    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
+    appState.tradeChart.xmin = chart.scales.x.min;
+    appState.tradeChart.xmax = chart.scales.x.max;
+    serializeStateToURL();
+}
+
+function callbackTradeZoom(chart) {
+    fresh.trade = false;
+    updateTradeTimeUnit(chart);
+    updateTradeChart(chart.scales.x.min, chart.scales.x.max);
+    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
+    appState.tradeChart.xmin = chart.scales.x.min;
+    appState.tradeChart.xmax = chart.scales.x.max;
     serializeStateToURL();
 }
 
@@ -1398,4 +1632,276 @@ function updateProductionChart(minDate, maxDate) {
     productionChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
     productionChart.update();
     fresh.production = true;
+}
+
+function createTradeChart() {
+    const ctx = document.getElementById('tradeChart').getContext('2d');
+
+    tradeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            datasets: []
+        },
+        options: {
+            animation: false,
+            normalized: true,
+            parsing: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            onHover: (event, activeElements, chart) => {
+                const canvas = chart.canvas;
+                canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Swiss energy trade over time'
+                },
+                zoom: {
+                    zoom: {
+                        wheel: {
+                            enabled: true,
+                            speed: 0.1
+                        },
+                        pinch: {
+                            enabled: true
+                        },
+                        drag: {
+                            enabled: false
+                        },
+                        mode: 'x',
+                        onZoomComplete: ({chart}) => callbackTradeZoom(chart)
+                    },
+                    pan: {
+                        enabled: true,
+                        mode: 'x',
+                        onPanComplete: ({chart}) => callbackTradePan(chart)
+                    },
+                    limits: {
+                        x: {
+                            min: 'original',
+                            max: 'original',
+                            minRange: 7 * 24 * 60 * 60 * 1000, // 1 week minimum
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 45,
+                    },
+                    time: {
+                        unit: 'month',
+                        displayFormats: {
+                            day: 'dd MMM yyyy',
+                            week: 'dd MMM yyyy',
+                            month: 'MMM yyyy',
+                            quarter: 'MMM yyyy',
+                            year: 'yyyy'
+                        },
+                        tooltipFormat: 'MMM yyyy'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Net Import/Export (GWh)'
+                    },
+                    // Center the y-axis at 0 for import/export visualization
+                    beginAtZero: false
+                }
+            },
+            datasets: {
+                bar: {
+                    categoryPercentage: 0.9,
+                    barPercentage: 1.0,
+                }
+            },
+        }
+    });
+
+    // Add keyboard controls for trade chart
+    window.tradeChartKeyListener = (e) => {
+        if (appState.currentMode !== 'trade' || !tradeChart) return;
+        switch (e.key) {
+            case '-': case '_':
+                e.preventDefault();
+                tradeChart.zoom(0.8);
+                callbackTradeZoom(tradeChart);
+                break;
+            case '+': case '=':
+                e.preventDefault();
+                tradeChart.zoom(1.2);
+                callbackTradeZoom(tradeChart);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                tradeChart.pan({ x: 100 });
+                callbackTradePan(tradeChart);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                tradeChart.pan({ x: -100 });
+                callbackTradePan(tradeChart);
+                break;
+        }
+    };
+    document.addEventListener('keydown', window.tradeChartKeyListener);
+}
+
+function updateTradeTimeUnit(chart) {
+    if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
+        console.warn('Chart scales not available for time unit update');
+        return;
+    }
+
+    // chart.scales.x.{max,min} are Unix timestamps in milliseconds
+    const range = chart.scales.x.max - chart.scales.x.min;
+    const days = range / 24 / 60 / 60 / 1000;
+
+    let unit = 'quarter', tooltipFormat = 'MMM yyyy';
+    if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
+    else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
+    else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
+
+    const currentUnit = chart.options.scales.x.time.unit;
+    if (currentUnit === unit) return;
+    chart.options.scales.x.time.unit = unit;
+    chart.options.scales.x.time.tooltipFormat = tooltipFormat;
+}
+
+function updateTradeCategories(minDate, maxDate) {
+    const totals = new Array(4).fill(0); // 4 countries
+    let count = 0;
+
+    tradeData.forEach(record => {
+        if (record.date < minDate || record.date > maxDate) return;
+
+        // Calculate net imports for each country (imports - exports)
+        // Austria: imports[0] - exports[4]
+        // Germany: imports[1] - exports[5]
+        // France: imports[2] - exports[6]
+        // Italy: imports[3] - exports[7]
+        totals[0] += (record.trade[0] - record.trade[4]) / 1000; // Convert MWh to GWh
+        totals[1] += (record.trade[1] - record.trade[5]) / 1000;
+        totals[2] += (record.trade[2] - record.trade[6]) / 1000;
+        totals[3] += (record.trade[3] - record.trade[7]) / 1000;
+        count++;
+    });
+
+    TRADE_CATEGORIES.forEach((category, index) => {
+        const netElement = document.getElementById(`trade-net-${index}`);
+        if (netElement) {
+            const avgNet = totals[index] / (count / 24); // Convert to daily average
+            netElement.textContent = avgNet.toFixed(1);
+        }
+    });
+}
+
+function updateTradeChart(minDate, maxDate) {
+    function aggregateByTimeUnit(unit) {
+        const aggregated = {};
+
+        tradeData.forEach(record => {
+            const date = new Date(record.date);
+            date.setHours(0, 0, 0, 0); // Round to day
+            switch (unit) {
+                case 'week':
+                    date.setDate(date.getDate() - date.getDay());
+                    break;
+                case 'month':
+                    date.setDate(1);
+                    break;
+                case 'quarter':
+                    date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
+                    break;
+                case 'year':
+                    date.setFullYear(date.getFullYear(), 0, 1);
+                    break;
+                default: // day
+                    break;
+            }
+            const key = date.getTime();
+            if (!aggregated[key]) {
+                aggregated[key] = {
+                    date: key,
+                    trade: new Array(8).fill(0),
+                    count: 0
+                };
+            }
+            record.trade.forEach((value, index) => {
+                aggregated[key].trade[index] += value;
+            });
+            aggregated[key].count += 1;
+        });
+
+        // Create time-sorted array of aggregated data
+        return Object.values(aggregated).map(item => {
+            return {
+                date: item.date,
+                trade: item.trade
+            };
+        }).sort((a, b) => a.date - b.date);
+    }
+
+    if (fresh.trade) { return; }
+
+    let currentUnit = tradeChart.options.scales.x.time.unit;
+
+    const aggregatedData = aggregateByTimeUnit(currentUnit);
+    const datasets = [];
+
+    [...appState.selectedTradeCategories].reverse().forEach((category, index) => {
+        const categoryIndex = TRADE_CATEGORIES.indexOf(category);
+        if (categoryIndex === -1) return;
+
+        const data = aggregatedData.map(record => ({
+            x: record.date,
+            // Net import: imports - exports (positive = net import, negative = net export)
+            y: (record.trade[categoryIndex] - record.trade[categoryIndex + 4]) / 1000 // Convert MWh to GWh
+        }));
+
+        datasets.push({
+            label: category,
+            data: data,
+            backgroundColor: `rgba(${TRADE_CATEGORY_COLORS[category].join(',')}, 0.8)`,
+            borderColor: `rgb(${TRADE_CATEGORY_COLORS[category].join(',')})`,
+            borderWidth: 1
+        });
+    });
+
+    tradeChart.data.datasets = datasets;
+    tradeChart.options.plugins.title.text = `Energy trade (GWh ${TIME_UNIT_NAMES[currentUnit]})`;
+
+    // Set zoom and pan limits to data range
+    if (minDate && maxDate) {
+        tradeChart.scales.x.min = minDate;
+        tradeChart.scales.x.max = maxDate;
+    } else if (appState.tradeChart.xmin && appState.tradeChart.xmax) {
+        // Use saved bounds from state
+        tradeChart.scales.x.min = appState.tradeChart.xmin;
+        tradeChart.scales.x.max = appState.tradeChart.xmax;
+    } else if (aggregatedData.length > 0) {
+        // Default to full data range
+        tradeChart.scales.x.min = aggregatedData[0].date;
+        tradeChart.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
+    }
+    tradeChart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
+    tradeChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
+    tradeChart.update();
+    fresh.trade = true;
 }
