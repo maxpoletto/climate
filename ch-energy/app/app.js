@@ -79,7 +79,7 @@ const TRADE_CATEGORY_COLORS = {
 };
 
 const TABLE_COLUMNS = ["type", "power", "town", "canton", "date", "gps"];
-const TABLE_NUM_ROWS = 50;       // Show 50 facilities per page
+const TABLE_NUM_ROWS = 40;       // Show 50 facilities per page
 const DEBOUNCE_MS = 100;         // 300ms delay to debounce expensive UI interactions.
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -527,14 +527,14 @@ class TimeSeriesChart {
         }
 
         document.getElementById(this.canvasId).focus();
-        if (fresh[this.fresh]) { console.log('fresh', this.fresh, fresh[this.fresh]); return; }
+        if (fresh[this.fresh]) { return; }
         const chart = this.chart;
         let currentUnit = chart.options.scales.x.time.unit;
         const aggregatedData = aggregateByTimeUnit(this.data, currentUnit);
 
         const datasets = [];
 
-        [...this.selectedCategories].reverse().forEach((category, _) => {
+        [...appState[this.selectedCategories]].reverse().forEach((category, _) => {
             const categoryIndex = this.categories.indexOf(category);
             if (categoryIndex === -1) return;
             const color = this.colors[category] || [128, 128, 128];
@@ -573,7 +573,6 @@ class TimeSeriesChart {
     }
 
     callbackCategoryChange(e) {
-        console.log('callbackCategoryChange', e);
         const allCheckbox = document.getElementById(this.categoryCheckboxElementId + '-all');
         const checked = e.target.checked;
         if (e.target.id === allCheckbox.id) {
