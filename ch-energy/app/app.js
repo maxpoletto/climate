@@ -278,7 +278,7 @@ class TimeSeriesChart {
         this.categoryAggregator = config.categoryAggregator;
         this.categoryValueElementId = config.categoryValueElementId;
         this.categoryTotalElementId = config.categoryTotalElementId;
-        this.categoryAllElementId = config.categoryAllElementId;
+        this.categoryCheckboxElementId = config.categoryCheckboxElementId;
         this.categoryTableElementId = config.categoryTableElementId;
         this.resetZoomElementId = config.resetZoomElementId;
         this.displayValueProcessor = config.displayValueProcessor;
@@ -408,10 +408,10 @@ class TimeSeriesChart {
         const allCheckbox = document.createElement('input');
         allCheckbox.type = 'checkbox';
         allCheckbox.className = 'category-checkbox';
-        allCheckbox.id = this.categoryAllElementId;
+        allCheckbox.id = this.categoryCheckboxElementId + '-all';
         allCheckbox.checked = this.selectedCategories.length === this.categories.length;
         const allLabel = document.createElement('label');
-        allLabel.htmlFor = this.categoryAllElementId;
+        allLabel.htmlFor = this.categoryCheckboxElementId + '-all';
         allLabel.textContent = 'Select/Deselect All';
         const allTd = document.createElement('td');
         allTd.colSpan = 2;
@@ -430,7 +430,7 @@ class TimeSeriesChart {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.className = 'category-checkbox';
-            checkbox.id = `${this.categoryAllElementId}-${index}`;
+            checkbox.id = `${this.categoryCheckboxElementId}${index}`;
             checkbox.value = category;
             checkbox.checked = this.selectedCategories.includes(category);
 
@@ -454,7 +454,7 @@ class TimeSeriesChart {
             // Net import column
             const netImportCell = document.createElement('td');
             netImportCell.className = 'count-cell';
-            netImportCell.id = this.categoryValueElementId + index;
+            netImportCell.id = `${this.categoryValueElementId}-${index}`;
 
             tr.appendChild(sourceCell);
             tr.appendChild(netImportCell);
@@ -466,9 +466,9 @@ class TimeSeriesChart {
         const averages = this.categoryAggregator(this.data, minDate, maxDate);
         let selectedTotal = 0;
         this.categories.forEach((category, index) => {
-            const element = document.getElementById(`${this.categoryValueElementId}${index}`);
+            const element = document.getElementById(`${this.categoryValueElementId}-${index}`);
             if (!element) {
-                console.warn(`Category value element not found: ${this.categoryValueElementId}${index}`);
+                console.warn(`Category value element not found: ${this.categoryValueElementId}-${index}`);
                 return;
             }
             element.textContent = averages[index].toFixed(1);
@@ -572,20 +572,21 @@ class TimeSeriesChart {
     }
 
     callbackCategoryChange(e) {
-        const allCheckbox = document.getElementById(this.categoryAllElementId);
+        console.log('callbackCategoryChange', e);
+        const allCheckbox = document.getElementById(this.categoryCheckboxElementId + '-all');
         const checked = e.target.checked;
         if (e.target.id === allCheckbox.id) {
             // Select/deselect all
             document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]`).forEach(cb => {
                 if (cb.id !== allCheckbox.id) cb.checked = checked;
             });
-            appState[this.selectedCategoriesKey] = checked ? [...this.categories] : [];
+            this.selectedCategories = checked ? [...this.categories] : [];
         } else {
-            appState[this.selectedCategoriesKey] = Array
-                .from(document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]:not(#${this.categoryAllElementId}):checked`))
+            this.selectedCategories = Array
+                .from(document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]:not(#${this.categoryCheckboxElementId}-all):checked`))
                 .map(cb => cb.value);
             // Sync select-all checkbox
-            const allChecked = appState[this.selectedCategoriesKey].length === this.categories.length;
+            const allChecked = this.selectedCategories.length === this.categories.length;
             allCheckbox.checked = allChecked;
         }
 
@@ -980,9 +981,9 @@ function initializeUI() {
         startDate: '2015-01-01',
 
         categoryAggregator: productionCategoryAggregator,
-        categoryValueElementId: 'prod-avg-',
+        categoryValueElementId: 'prod-avg',
         categoryTotalElementId: 'totalProduction',
-        categoryAllElementId: 'production-cat-select-all',
+        categoryCheckboxElementId: 'production-cat-select',
         categoryTableElementId: 'productionCategoryTableBody',
         resetZoomElementId: 'resetProductionZoom',
         displayValueProcessor: productionValueProcessor,
@@ -1004,9 +1005,9 @@ function initializeUI() {
         startDate: '2017-01-01',
 
         categoryAggregator: tradeCategoryAggregator,
-        categoryValueElementId: 'trade-net-',
+        categoryValueElementId: 'trade-net',
         categoryTotalElementId: 'totalTrade',
-        categoryAllElementId: 'trade-cat-select-all',
+        categoryCheckboxElementId: 'trade-cat-select',
         categoryTableElementId: 'tradeCategoryTableBody',
         resetZoomElementId: 'resetTradeZoom',
         displayValueProcessor: tradeValueProcessor,
