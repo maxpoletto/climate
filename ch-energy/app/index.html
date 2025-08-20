@@ -48,51 +48,53 @@
         <button id="facilitiesTab" class="tab-button active">⚙️ Facilities</button>
         <button id="productionTab" class="tab-button">⚡ Production</button>
         <button id="tradeTab" class="tab-button">🔄 Import/Export</button>
+        <button id="aboutTab" class="tab-button">ℹ️ About</button>
     </div>
 
-    <button class="info-button" id="infoButton">?</button>
-    <div id="map"></div>
-    <div id="tableView" style="display: none;">
-        <div id="tableContainer">
-            <div id="tableHeader">
-                <div id="tableControls">
-                    <div id="paginationControls">
-                        <button id="firstPage" disabled>&lt;&lt;</button>
-                        <button id="prevPage" disabled>&lt;</button>
-                        <span id="pageInfo">Page <span id="currentPageNumber" style="cursor: pointer; text-decoration: underline; color: #2196F3;">1</span> of <span id="totalPages">1</span></span>
-                        <button id="nextPage" disabled>&gt;</button>
-                        <button id="lastPage" disabled>&gt;&gt;</button>
+    <div id="facilitiesView">
+        <div id="map"></div>
+        <div id="tableView"">
+            <div id="tableContainer">
+                <div id="tableHeader">
+                    <div id="tableControls">
+                        <div id="paginationControls">
+                            <button id="firstPage" disabled>&lt;&lt;</button>
+                            <button id="prevPage" disabled>&lt;</button>
+                            <span id="pageInfo">Page <span id="currentPageNumber" style="cursor: pointer; text-decoration: underline; color: #2196F3;">1</span> of <span id="totalPages">1</span></span>
+                            <button id="nextPage" disabled>&gt;</button>
+                            <button id="lastPage" disabled>&gt;&gt;</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div id="tableWrapper">
-                <table id="facilitiesTable">
-                    <thead id="facilitiesTableHead">
-                        <tr>
-                            <th data-sort="SubCategory" class="sortable">
-                                Energy Source <span class="sort-indicator">↕</span>
-                            </th>
-                            <th data-sort="TotalPower" class="sortable numeric">
-                                Power (kW) <span class="sort-indicator">↕</span>
-                            </th>
-                            <th data-sort="Municipality" class="sortable">
-                                Municipality <span class="sort-indicator">↕</span>
-                            </th>
-                            <th data-sort="Canton" class="sortable">
-                                Canton <span class="sort-indicator">↕</span>
-                            </th>
-                            <th data-sort="BeginningOfOperation" class="sortable date">
-                                Started <span class="sort-indicator">↕</span>
-                            </th>
-                            <th data-sort="gps" class="sortable">
-                                GPS <span class="sort-indicator">↕</span>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody id="facilitiesTableBody">
-                        <!-- Table rows will be populated dynamically -->
-                    </tbody>
-                </table>
+                <div id="tableWrapper">
+                    <table id="facilitiesTable">
+                        <thead id="facilitiesTableHead">
+                            <tr>
+                                <th data-sort="SubCategory" class="sortable">
+                                    Energy Source <span class="sort-indicator">↕</span>
+                                </th>
+                                <th data-sort="TotalPower" class="sortable numeric">
+                                    Power (kW) <span class="sort-indicator">↕</span>
+                                </th>
+                                <th data-sort="Municipality" class="sortable">
+                                    Municipality <span class="sort-indicator">↕</span>
+                                </th>
+                                <th data-sort="Canton" class="sortable">
+                                    Canton <span class="sort-indicator">↕</span>
+                                </th>
+                                <th data-sort="BeginningOfOperation" class="sortable date">
+                                    Started <span class="sort-indicator">↕</span>
+                                </th>
+                                <th data-sort="gps" class="sortable">
+                                    GPS <span class="sort-indicator">↕</span>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="facilitiesTableBody">
+                            <!-- Table rows will be populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -122,6 +124,73 @@
             <div id="tradeChartContainer">
                 <canvas id="tradeChart"></canvas>
             </div>
+        </div>
+    </div>
+    <div id="aboutView">
+        <div class="about-content">
+            <h3>Swiss Energy Explorer</h3>
+
+            <p>This tool displays electricity generation facilities in Switzerland and daily Swiss electricity production since 2015.</p>
+
+            <h4>Instructions</h4>
+            <ul>
+                <li><strong>Mode tabs</strong>
+                    <p>Click the <strong>Facilities</strong>, <strong>Production</strong>, or <strong>Import/Export</strong> tab at the top to switch between different views of Switzerland's energy data.</p>
+                </li>
+                <li><strong>Table / Map view toggle</strong>
+                    <p>Within the facilities tab, click <strong>Table View</strong> to switch from map to table, or <strong>Map View</strong> to switch from table to map.</p>
+                </li>
+                <li><strong>Energy sources panel</strong>
+                    <p>Controls what facilities are displayed and counted.</p>
+                    <ul>
+                        <li>Check/uncheck energy source types (biomass, hydro, etc.).</li>
+                        <li>Use the power slider to filter by facility capacity.</li>
+                        <li>Use the search box to find facilities by name, municipality, canton, or start year.</li>
+                    </ul>
+                </li>
+                <li><strong>Map view</strong>
+                    <p>Facilities are shown as colored circles. Circle size represents power capacity. Circle color represents energy source type.</p>
+                    <p>Hover over any circle to see details.</p>
+                </li>
+                <li><strong>Table view</strong>
+                    <p>Shows filtered facilities in a sortable, paginated table.</p>
+                    <p>Click any column header to sort by that column.</p>
+                </li>
+                <li><strong>Production mode</strong>
+                    <p>Shows historical electricity production data by energy source. Use the checkboxes to select which energy sources to display. The chart automatically adjusts time granularity based on zoom level (daily → weekly → monthly → quarterly).</p>
+                    <p>Hover over any bar to see details for the corresponding time period.</p>
+                </li>
+                <li><strong>Import/Export mode</strong>
+                    <p>Shows Switzerland's electricity trade with neighboring countries (Austria, Germany, France, Italy). Positive values represent net imports, negative values represent net exports. The behavior of the control panel and zooming and panning controls are the same as in production mode.</p>
+                </li>
+            </ul>
+
+            <h4>About the data</h4>
+            <p>The facilities dataset contains all operational electricity production facilities registered in the Swiss Certificate of Origin system, including:</p>
+            <ul>
+                <li>All facilities with capacity greater than 30 kVA.</li>
+                <li>Smaller facilities (>2 kW) voluntarily registered for certificates.</li>
+                <li>Facilities subsidized via feed-in tariffs, one-time payments, or investment contributions pursuant to the 2021 Swiss Energy Act.</li>
+            </ul>
+
+            <p>The production data contains aggregate energy production broken down by day and energy source, starting on 2015-01-01.</p>
+            <p>The trade data contains aggregate energy trade with neighboring countries (Austria, Germany, France, Italy) broken down by day and country, starting on 2017-01-01.</p>
+            <p><strong>Unfortunately, the production source types are not exactly the same as those in the facilities dataset, and there are no public per-facility production records.</strong></p>
+
+            <p>The Swiss Federal Office of Energy updates the data regularly. This app polls the data daily.</p>
+
+            <h4>Data sources</h4>
+            <p><strong>Swiss Federal Office of Energy (BFE):</strong>
+            <a href="https://www.bfe.admin.ch/bfe/de/home/versorgung/digitalisierung-und-geoinformation/geoinformation/geodaten/produktionsanlagen/elektrizitaetsproduktionsanlagen.html" target="_blank">Electricity Production Facilities Documentation</a></p>
+
+            <p><strong>BFE facilities data (Open Government Data Portal):</strong>
+            <a href="https://opendata.swiss/de/dataset/elektrizitatsproduktionsanlagen/resource/3a10b118-2382-4fc1-9571-e61d0294778e" target="_blank">CSV</a></p>
+
+            <p><strong>Swissgrid production data (Open Government Data Portal):</strong>
+            <a href="https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv" target="_blank">CSV</a></p>
+
+            <p><strong>Import/export data (OGDP / ENTSO-E):</strong>
+            <a href="https://www.uvek-gis.admin.ch/BFE/ogd/107/ogd107_strom_import_export.csv" target="_blank">CSV</a></p>
         </div>
     </div>
     <div id="controls">
@@ -205,77 +274,6 @@
             </table>
         </div>
         <div class="annotations" id="annotations"></div>
-    </div>
-
-    <div class="info-modal" id="infoModal">
-        <div class="info-modal-content">
-            <button class="close-modal" id="closeModal">&times;</button>
-            <h3>Swiss Energy Explorer</h3>
-
-            <p>This tool displays electricity generation facilities in Switzerland and daily Swiss electricity production since 2015.</p>
-
-            <h4>Instructions</h4>
-            <ul>
-                <li><strong>Mode tabs</strong>
-                    <p>Click the <strong>Facilities</strong>, <strong>Production</strong>, or <strong>Import/Export</strong> tab at the top to switch between different views of Switzerland's energy data.</p>
-                </li>
-                <li><strong>Table / Map view toggle</strong>
-                    <p>Within facilities mode, click <strong>Table View</strong> to switch from map to table, or <strong>Map View</strong> to switch from table to map.</p>
-                </li>
-                <li><strong>Energy sources panel</strong>
-                    <p>Controls what facilities are displayed and counted.</p>
-                    <ul>
-                        <li>Check/uncheck energy source types (biomass, hydro, etc.).</li>
-                        <li>In facilities mode, drag the handles of the power range slider to filter facilities by their power output.</li>
-                        <li>In facilities mode, use the search input to filter facilities by name, municipality, canton, or energy source. Supports case-insensitive free-form substring match, e.g., 'vs hydro 2021',
-                            and also the keywords 'canton' (e.g., 'canton:be'),'city' (e.g., 'city:zürich'), and 'year' (tip: e.g., 'year:202' matches any facility started in the 2020s).
-                        </li>
-                    </ul>
-                    <p>Counters update in real time as you change the filters.</p>
-                </li>
-                <li><strong>Facilities map view</strong>
-                    <p>Zoom: mouse wheel or pinch or -/_/+/= keys. Pan: tap/click + drag. Rotate/tilt: Shift+drag. Hover over any facility for details.</p>
-                    <p>The dataset does not contain GPS coordinates for all facilities, so not all facilities are displayed on the map.</p>
-                </li>
-                <li><strong>Facilities table view</strong>
-                    <p>View all facilities, including ones without GPS coordinates.</p>
-                    <p>Use the pagination controls to navigate (click on the page number to jump to a specific page).</p>
-                    <p>Use the column headers to sort.</p>
-                </li>
-                <li><strong>Production mode</strong>
-                    <p>The chart by default shows the entire time range (2015 to present) broken down by quarters.</p>
-                    <p>Zoom: mouse wheel or pinch or -/_/+/= keys. Pan: tap/click + drag or arrow keys. Summary statistics in the sources panel update as you move around.
-                        Bars rescale (quarters → months → weeks → days) as you zoom in.</p>
-                    <p>Hover over any bar to see details for the corresponding time period.</p>
-                </li>
-                <li><strong>Import/Export mode</strong>
-                    <p>Shows Switzerland's electricity trade with neighboring countries (Austria, Germany, France, Italy) from 2017 onwards. Positive values represent net imports, negative values represent net exports. The behavior of the control panel and zooming and panning controls are the same as in production mode.</p>
-                </li>
-            </ul>
-
-            <h4>About the data</h4>
-            <p>The facilities dataset contains all operational electricity production facilities registered in the Swiss Certificate of Origin system, including:</p>
-            <ul>
-                <li>All facilities with capacity greater than 30 kVA.</li>
-                <li>Smaller facilities (>2 kW) voluntarily registered for certificates.</li>
-                <li>Facilities subsidized via feed-in tariffs, one-time payments, or investment contributions pursuant to the 2021 Swiss Energy Act.</li>
-            </ul>
-
-            <p>The production data contains aggregate energy production broken down by day and energy source, starting on 2015-01-01.</p>
-            <p><strong>Unfortunately, the production source types are not exactly the same as those in the facilities dataset, and there are no public per-facility production records.</strong></p>
-
-            <p>Facilities data is updated quarterly. Production data is updated weekly (with 1-day granularity).</p>
-
-            <h4>Data sources</h4>
-            <p><strong>Swiss Federal Office of Energy (BFE):</strong>
-            <a href="https://www.bfe.admin.ch/bfe/de/home/versorgung/digitalisierung-und-geoinformation/geoinformation/geodaten/produktionsanlagen/elektrizitaetsproduktionsanlagen.html" target="_blank">Electricity Production Facilities Documentation</a></p>
-
-            <p><strong>BFE facilities data (Open Government Data Portal):</strong>
-            <a href="https://opendata.swiss/de/dataset/elektrizitatsproduktionsanlagen/resource/3a10b118-2382-4fc1-9571-e61d0294778e" target="_blank">CSV</a></p>
-
-            <p><strong>Swissgrid production data (Open Government Data Portal):</strong>
-            <a href="https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv" target="_blank">CSV</a></p>
-        </div>
     </div>
 </body>
 </html>

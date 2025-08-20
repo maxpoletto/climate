@@ -6,7 +6,8 @@
 const AppMode = {
     FACILITIES: 1,
     PRODUCTION: 2,
-    TRADE: 3
+    TRADE: 3,
+    ABOUT: 4
 };
 
 // Color palette for different categories
@@ -1004,6 +1005,9 @@ function initializeUI() {
         case AppMode.TRADE:
             modeTrade();
             break;
+        case AppMode.ABOUT:
+            modeAbout();
+            break;
         default:
             modeFacilities();
             break;
@@ -1011,36 +1015,7 @@ function initializeUI() {
 }
 
 function setupEventHandlers() {
-    function setupInfoModalHandlers() {
-        const infoButton = document.getElementById('infoButton');
-        const infoModal = document.getElementById('infoModal');
-        const closeModal = document.getElementById('closeModal');
-
-        infoButton.addEventListener('click', () => {
-            infoModal.classList.add('show');
-        });
-
-        closeModal.addEventListener('click', () => {
-            infoModal.classList.remove('show');
-        });
-
-        // Close modal when clicking outside
-        infoModal.addEventListener('click', (e) => {
-            if (e.target === infoModal) {
-                infoModal.classList.remove('show');
-            }
-        });
-
-        // Close modal with Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && infoModal.classList.contains('show')) {
-                infoModal.classList.remove('show');
-            }
-        });
-    }
-
     setupTableEventHandlers();
-    setupInfoModalHandlers();
 
     const facilitiesTab = document.getElementById('facilitiesTab');
     facilitiesTab.addEventListener('click', callbackModeFacilities);
@@ -1050,6 +1025,9 @@ function setupEventHandlers() {
 
     const tradeTab = document.getElementById('tradeTab');
     tradeTab.addEventListener('click', callbackModeTrade);
+
+    const aboutTab = document.getElementById('aboutTab');
+    aboutTab.addEventListener('click', callbackModeAbout);
 
     const viewToggle = document.getElementById('viewToggle');
     viewToggle.addEventListener('click', callbackFacilitiesViewToggle);
@@ -1088,13 +1066,22 @@ function callbackModeTrade() {
     serializeStateToURL();
 }
 
+function callbackModeAbout() {
+    if (appState.currentMode === AppMode.ABOUT) { return; }
+    appState.currentMode = AppMode.ABOUT;
+    modeAbout();
+    serializeStateToURL();
+}
+
 function modeFacilities() {
     const facilitiesTab = document.getElementById('facilitiesTab');
     const productionTab = document.getElementById('productionTab');
     const tradeTab = document.getElementById('tradeTab');
+    const aboutTab = document.getElementById('aboutTab');
     facilitiesTab.classList.add('active');
     productionTab.classList.remove('active');
     tradeTab.classList.remove('active');
+    aboutTab.classList.remove('active');
 
     // Show facilities controls, hide others
     document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
@@ -1104,6 +1091,7 @@ function modeFacilities() {
     // Hide other views
     document.getElementById('productionView').style.display = 'none';
     document.getElementById('tradeView').style.display = 'none';
+    document.getElementById('aboutView').style.display = 'none';
 
     renderFacilitiesToggle();
     renderFacilities();
@@ -1113,9 +1101,11 @@ function modeProduction() {
     const facilitiesTab = document.getElementById('facilitiesTab');
     const productionTab = document.getElementById('productionTab');
     const tradeTab = document.getElementById('tradeTab');
+    const aboutTab = document.getElementById('aboutTab');
     facilitiesTab.classList.remove('active');
     productionTab.classList.add('active');
     tradeTab.classList.remove('active');
+    aboutTab.classList.remove('active');
 
     // Annotation here is just the last update date
     document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
@@ -1131,6 +1121,7 @@ function modeProduction() {
     document.getElementById('tableView').style.display = 'none';
     document.getElementById('productionView').style.display = 'block';
     document.getElementById('tradeView').style.display = 'none';
+    document.getElementById('aboutView').style.display = 'none';
 
     // Initialize or update the chart
     productionView.updateChart();
@@ -1140,9 +1131,11 @@ function modeTrade() {
     const facilitiesTab = document.getElementById('facilitiesTab');
     const productionTab = document.getElementById('productionTab');
     const tradeTab = document.getElementById('tradeTab');
+    const aboutTab = document.getElementById('aboutTab');
     facilitiesTab.classList.remove('active');
     productionTab.classList.remove('active');
     tradeTab.classList.add('active');
+    aboutTab.classList.remove('active');
 
     // Annotation here is just the last update date
     document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
@@ -1158,9 +1151,36 @@ function modeTrade() {
     document.getElementById('tableView').style.display = 'none';
     document.getElementById('productionView').style.display = 'none';
     document.getElementById('tradeView').style.display = 'block';
+    document.getElementById('aboutView').style.display = 'none';
 
     // Initialize or update the chart
     tradeView.updateChart();
+}
+
+function modeAbout() {
+    const facilitiesTab = document.getElementById('facilitiesTab');
+    const productionTab = document.getElementById('productionTab');
+    const tradeTab = document.getElementById('tradeTab');
+    const aboutTab = document.getElementById('aboutTab');
+    facilitiesTab.classList.remove('active');
+    productionTab.classList.remove('active');
+    tradeTab.classList.remove('active');
+    aboutTab.classList.add('active');
+
+    // Hide annotations
+    document.getElementById('annotations').style.display = 'none';
+
+    // Hide all controls
+    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'none');
+
+    // Show about view, hide others
+    document.getElementById('map').style.display = 'none';
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('productionView').style.display = 'none';
+    document.getElementById('tradeView').style.display = 'none';
+    document.getElementById('aboutView').style.display = 'block';
 }
 
 ///////////////////////////////////////////////////////////////////////////////
