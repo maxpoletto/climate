@@ -322,7 +322,8 @@ class TimeSeriesChart {
                 },
                 plugins: {
                     legend: {
-                        position: 'top'
+                        position: 'top',
+                        reverse: true
                     },
                     title: {
                         display: true,
@@ -533,7 +534,7 @@ class TimeSeriesChart {
 
         const datasets = [];
 
-        [...this.selectedCategories].forEach((category, _) => {
+        [...this.selectedCategories].reverse().forEach((category, _) => {
             const categoryIndex = this.categories.indexOf(category);
             if (categoryIndex === -1) return;
             const color = this.colors[category] || [128, 128, 128];
