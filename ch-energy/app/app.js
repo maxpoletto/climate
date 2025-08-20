@@ -283,7 +283,9 @@ class TimeSeriesChart {
         this.updateTimeUnit(this.chart);
         this.updateCategories(min, max);
 
-        document.getElementById(this.canvasId).addEventListener('keydown', this.callbackKeyDown.bind(this));
+        const canvas = document.getElementById(this.canvasId);
+        canvas.tabIndex = 0; // Make canvas focusable
+        canvas.addEventListener('keydown', this.callbackKeyDown.bind(this));
         document.getElementById(this.resetZoomElementId).addEventListener('click', this.callbackResetZoom.bind(this));
         document.getElementById(this.categoryTableElementId).addEventListener('change', this.callbackCategoryChange.bind(this));
     }
@@ -512,6 +514,7 @@ class TimeSeriesChart {
             }).sort((a, b) => a.date - b.date);
         }
 
+        document.getElementById(this.canvasId).focus();
         if (fresh[this.freshKey]) { return; }
         const chart = this.chart;
         let currentUnit = chart.options.scales.x.time.unit;
@@ -975,6 +978,7 @@ function initializeUI() {
         selectedCategories: appState.selectedTradeCategories,
 
         freshKey: 'trade',
+
         chartTitle: 'Energy trade (imports - exports)',
         yAxisTitle: 'Net (imports - exports) (GWh)',
         beginAtZero: false,

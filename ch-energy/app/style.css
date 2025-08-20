@@ -809,6 +809,11 @@ body {
     -ms-user-select: none;
 }
 
+#productionChart:focus,
+#tradeChart:focus {
+    outline: none;
+}
+
 #tradeChartContainer {
     flex: 1;
     padding: 20px;
@@ -823,8 +828,6 @@ body {
     -webkit-user-select: none;
     -ms-user-select: none;
 }
-
-
 
 .production-controls {
     display: none;
