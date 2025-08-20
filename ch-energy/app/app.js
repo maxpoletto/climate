@@ -10,6 +10,16 @@ const AppMode = {
     ABOUT: 4
 };
 
+const FACILITY_FIELDS = [
+    "town",
+    "canton",
+    "date",
+    "power",
+    "type",
+    "lat",
+    "lon"
+]
+
 // Color palette for different categories
 const FACILITIES_CATEGORY_COLORS = {
     'Photovoltaic': [255, 193, 7],         // Amber/Yellow - solar
@@ -68,7 +78,7 @@ const TRADE_CATEGORY_COLORS = {
     'Italy': [76, 175, 80]         // Green
 };
 
-const TABLE_COLUMNS = ["SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps"];
+const TABLE_COLUMNS = ["type", "power", "town", "canton", "date", "gps"];
 const TABLE_NUM_ROWS = 50;       // Show 50 facilities per page
 const DEBOUNCE_MS = 100;         // 300ms delay to debounce expensive UI interactions.
 
@@ -113,7 +123,7 @@ const appState = {
 
     // Facilities mode state
     isTableView: false,
-    currentSort: { column: 'TotalPower', sortAscending: false },
+    currentSort: { column: 'power', sortAscending: false },
     currentPage: 1,
     minPower: 0.1,
     maxPower: 2000000,
@@ -743,10 +753,10 @@ function initializeDeckGL() {
             if (!object) return null;
             return {
                 html: `
-                    <strong>${object.SubCategory}</strong><br/>
-                    Power: ${object.TotalPower.toLocaleString()} kW<br/>
-                    Location: ${object.Municipality}, ${object.Canton}<br/>
-                    Started: ${object.BeginningOfOperation}
+                    <strong>${object.type}</strong><br/>
+                    Power: ${object.power.toLocaleString()} kW<br/>
+                    Location: ${object.town}, ${object.canton}<br/>
+                    Started: ${object.date}
                 `,
                 style: {
                     backgroundColor: 'white',
@@ -771,9 +781,17 @@ async function loadData() {
         if (!facilitiesResponse.ok) {
             throw new Error(`Failed to load facilities data: ${facilitiesResponse.status} ${facilitiesResponse.statusText}`);
         }
-        facilities.all = await facilitiesResponse.json();
+        const flist = await facilitiesResponse.json();
+        facilities.all = [];
+        for (const f of flist) {
+            const facility = {};
+            for (let i = 0; i < f.length; i++) {
+                facility[FACILITY_FIELDS[i]] = f[i];
+            }
+            facilities.all.push(facility);
+        }
         const numFacilitiesWithCoords = facilities.all.filter(f => f.lat && f.lon).length;
-        facilities.categories = [...new Set(facilities.all.map(f => f.SubCategory))].sort();
+        facilities.categories = [...new Set(facilities.all.map(f => f.type))].sort();
 
         // Download production data.
         const productionResponse = await fetch(`data/production.json?v=${ts}`);
@@ -1262,16 +1280,16 @@ function setupTableEventHandlers() {
 
 function sortFacilities(column, sortAscending) {
     switch (column) {
-        case 'TotalPower':
+        case 'power':
             facilities.all.sort((a, b) =>
                 {
-                    v = (a.TotalPower || 0) - (b.TotalPower || 0); return sortAscending ? v : -v;
+                    v = (a.power || 0) - (b.power || 0); return sortAscending ? v : -v;
                 });
             break;
-        case 'BeginningOfOperation':
+        case 'date':
             facilities.all.sort((a, b) =>
                 {
-                    v = new Date(a.BeginningOfOperation || '1800-01-01') - new Date(b.BeginningOfOperation || '1800-01-01');
+                    v = new Date(a.date || '1800-01-01') - new Date(b.date || '1800-01-01');
                     return sortAscending ? v : -v;
                 });
             break;
@@ -1339,32 +1357,28 @@ function renderTable(reset = false) {
         sourceCell.className = 'energy-source-cell';
         const colorIndicator = document.createElement('span');
         colorIndicator.className = 'table-color-indicator';
-        const color = FACILITIES_CATEGORY_COLORS[facility.SubCategory] || [128, 128, 128];
+        const color = FACILITIES_CATEGORY_COLORS[facility.type] || [128, 128, 128];
         colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
         sourceCell.appendChild(colorIndicator);
-        sourceCell.appendChild(document.createTextNode(facility.SubCategory || ''));
+        sourceCell.appendChild(document.createTextNode(facility.type || ''));
 
         // Power
         const powerCell = document.createElement('td');
         powerCell.className = 'numeric';
-        powerCell.textContent = (facility.TotalPower || 0).toLocaleString(undefined, {
+        powerCell.textContent = (facility.power || 0).toLocaleString(undefined, {
             minimumFractionDigits: 1,
             maximumFractionDigits: 1
         });
 
-        // Municipality
-        const municipalityCell = document.createElement('td');
-        municipalityCell.textContent = facility.Municipality || '';
+        const townCell = document.createElement('td');
+        townCell.textContent = facility.town || '';
 
-        // Canton
         const cantonCell = document.createElement('td');
-        cantonCell.textContent = facility.Canton || '';
+        cantonCell.textContent = facility.canton || '';
 
-        // Start date
-        const startCell = document.createElement('td');
-        startCell.textContent = facility.BeginningOfOperation || '';
+        const dateCell = document.createElement('td');
+        dateCell.textContent = facility.date || '';
 
-        // GPS indicator
         const gpsCell = document.createElement('td');
         gpsCell.className = 'gps-indicator';
         if (facility.lat && facility.lon) {
@@ -1375,9 +1389,9 @@ function renderTable(reset = false) {
 
         row.appendChild(sourceCell);
         row.appendChild(powerCell);
-        row.appendChild(municipalityCell);
+        row.appendChild(townCell);
         row.appendChild(cantonCell);
-        row.appendChild(startCell);
+        row.appendChild(dateCell);
         row.appendChild(gpsCell);
         tbody.appendChild(row);
     });
@@ -1407,8 +1421,8 @@ function renderMap() {
         id: 'facilities',
         data: facilities.onMap,
         getPosition: d => [d.lon, d.lat],
-        getFillColor: d => FACILITIES_CATEGORY_COLORS[d.SubCategory] || [128, 128, 128],
-        getRadius: d => 12 * Math.pow(Math.log(d.TotalPower + 1), 2),
+        getFillColor: d => FACILITIES_CATEGORY_COLORS[d.type] || [128, 128, 128],
+        getRadius: d => 12 * Math.pow(Math.log(d.power + 1), 2),
         radiusUnits: 'meters',
         opacity: 0.4,
         pickable: true,
@@ -1493,14 +1507,14 @@ function filterFacilities() {
     function searchPredicate(f) {
         if (appState.searchTokens.length === 0) return true;
 
-        // Fields to search: Energy Source, Power, Municipality, Canton, Date started
+        // Fields to search: type, power, date, town, canton, year of construction
         const searchableText = [
-            f.SubCategory || '',
-            (f.TotalPower || '').toString(),
-            f.BeginningOfOperation || '',
-            'city:' + (f.Municipality || ''),
-            'canton:' + (f.Canton || ''),
-            'year:' + (f.BeginningOfOperation || '').slice(0, 4),
+            f.type || '',
+            (f.power || '').toString(),
+            f.date || '',
+            'city:' + (f.town || ''),
+            'canton:' + (f.canton || ''),
+            'year:' + (f.date || '').slice(0, 4),
         ].join(' ').toLowerCase();
 
         // All tokens must be found as substrings
@@ -1517,11 +1531,11 @@ function filterFacilities() {
     facilities.filtered = [];
 
     facilities.all
-        .filter(f => f.TotalPower >= appState.minPower && f.TotalPower <= appState.maxPower)
+        .filter(f => f.power >= appState.minPower && f.power <= appState.maxPower)
         .filter(f => searchPredicate(f))
         .forEach(f => {
-            const category = f.SubCategory;
-            const MW = f.TotalPower / 1000;
+            const category = f.type;
+            const MW = f.power / 1000;
             facilities.categoryStats[category].count++;
             facilities.categoryStats[category].capacity += MW;
             // Add to filtered facilities if category is selected
