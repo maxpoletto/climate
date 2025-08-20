@@ -361,41 +361,54 @@ def import_production(csv_content : str) -> list[dict]:
     for date in sorted(daily_data.keys()):
         result.append({
             'date': date,
-            'prod': daily_data[date]
+            'val': daily_data[date]
         })
 
     logger.info("Generated data for %s days", len(result))
     return result
 
 def import_trade(csv_content: str) -> list[dict]:
-    """Import trade data from CSV file."""
+    """Import trade data from CSV file and aggregate hourly data to daily."""
     logger.info("Importing trade data...")
 
-    result = []
+    daily_aggregated = {}
     processed_rows = 0
     csv_reader = csv.DictReader(csv_content.splitlines())
 
     for row in csv_reader:
         try:
             datetime_str = row['Datetime']
+            date_key = datetime.fromisoformat(datetime_str).date().isoformat()
 
-            # Create trade flows array in the specified order
-            trade_flows = [0.0] * 8
+            trade_flows = [0.0] * len(TRADE_FLOW_INDEX)
             for field, index in TRADE_FLOW_INDEX.items():
                 if field in row:
                     trade_flows[index] = float(row[field])
 
-            result.append({
-                'date': datetime_str,
-                'trade': trade_flows
-            })
+            if date_key not in daily_aggregated:
+                daily_aggregated[date_key] = {
+                    'date': date_key,
+                    'val': [0.0] * len(TRADE_FLOW_INDEX),
+                }
+
+            for i in range(len(TRADE_FLOW_INDEX)):
+                daily_aggregated[date_key]['val'][i] += trade_flows[i]
+
             processed_rows += 1
 
         except (KeyError, ValueError) as e:
             logger.warning("Error processing trade row: %s: %s", row, e)
             continue
 
-    logger.info("Processed %s trade data points", processed_rows)
+    result = []
+    for date_key in sorted(daily_aggregated.keys()):
+        day_data = daily_aggregated[date_key]
+        result.append({
+            'date': day_data['date'],
+            'val': day_data['val']  # Keep as daily totals (MWh per day)
+        })
+
+    logger.info("Processed %s hourly data points into %s daily records", processed_rows, len(result))
     return result
 
 def save_compressed_json(data : list[dict], output_file : str):
@@ -456,7 +469,7 @@ def print_summary(facilities_data : list[dict], production_data : list[dict], tr
         # Totals by energy source
         totals = [0.0] * 6
         for record in production_data:
-            for i, val in enumerate(record['prod']):
+            for i, val in enumerate(record['val']):
                 totals[i] += val
 
         print("\nProduction Data:")
@@ -473,7 +486,7 @@ def print_summary(facilities_data : list[dict], production_data : list[dict], tr
 
         print("\nTrade Data:")
         print(f"  Date range: {start_date} to {end_date}")
-        print(f"  Total hours: {len(trade_data):,}")
+        print(f"  Total days: {len(trade_data):,}")
 
 def main():
     parser = argparse.ArgumentParser(description='Import Swiss energy facilities and production data')
