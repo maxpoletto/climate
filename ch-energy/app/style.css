@@ -408,7 +408,7 @@ body {
 * Top-level modes
 *******************/
 
-.mode {
+.time-series-mode {
     position: absolute;
     top: 50px;
     bottom: 0;

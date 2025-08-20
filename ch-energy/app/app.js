@@ -1099,6 +1099,7 @@ function activate(mode, controls) {
 
     document.querySelectorAll('.control-section').forEach(el => el.style.display = 'none');
     if (controls) {
+        document.getElementById("controls").style.display = 'block';
         document.querySelectorAll('.' + controls).forEach(el => el.style.display = 'block');
     }
 }
