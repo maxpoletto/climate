@@ -99,11 +99,11 @@ let facilities = {
 
 // Production data state
 let productionData = [];         // Historical production data
-let productionChart = null;      // Chart.js instance
+let productionView = null;       // State for production view
 
 // Trade data state
 let tradeData = [];              // Historical trade data
-let tradeChart = null;           // Chart.js instance for trade
+let tradeView = null;            // State for trade view
 
 // Global state object
 const appState = {
@@ -240,6 +240,413 @@ function deserializeStateFromURL() {
         }
     } catch (error) {
         console.warn('Failed to deserialize state from URL:', error);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Framework for time series charts
+///////////////////////////////////////////////////////////////////////////////
+
+class TimeSeriesChart {
+    constructor(config) {
+        this.canvasId = config.canvasId;
+        this.categories = config.categories;
+        this.colors = config.colors;
+        this.data = config.data;
+        this.chartType = config.chartType || 'bar';
+        this.state = config.state;
+        this.selectedCategories = config.selectedCategories;
+
+        this.freshKey = config.freshKey;
+        this.minRange = config.minRange || 7 * 24 * 60 * 60 * 1000; // one week minimum
+
+        this.chartTitle = config.chartTitle;
+        this.yAxisTitle = config.yAxisTitle || 'Value';
+        this.beginAtZero = config.beginAtZero === undefined ? true : config.beginAtZero;
+
+        this.categoryAggregator = config.categoryAggregator;
+        this.categoryValueElementId = config.categoryValueElementId;
+        this.categoryTotalElementId = config.categoryTotalElementId;
+        this.categoryAllElementId = config.categoryAllElementId;
+        this.categoryTableElementId = config.categoryTableElementId;
+        this.resetZoomElementId = config.resetZoomElementId;
+        this.displayValueProcessor = config.displayValueProcessor;
+
+        this.createChart();
+        this.renderControls();
+
+        const min = Math.max(this.state.xmin, new Date('2015-01-01').getTime());
+        const max = Math.min(this.state.xmax, new Date().getTime());
+        this.chart.options.scales.x.min = min;
+        this.chart.options.scales.x.max = max;
+        this.chart.update();
+        this.updateTimeUnit(this.chart);
+        this.updateCategories(min, max);
+
+        document.getElementById(this.canvasId).addEventListener('keydown', this.callbackKeyDown.bind(this));
+        document.getElementById(this.resetZoomElementId).addEventListener('click', this.callbackResetZoom.bind(this));
+        document.getElementById(this.categoryTableElementId).addEventListener('change', this.callbackCategoryChange.bind(this));
+    }
+
+    createChart() {
+        const ctx = document.getElementById(this.canvasId).getContext('2d');
+        const config = {
+            type: this.chartType,
+            data: { datasets: [] },
+            options: {
+                animation: false,
+                normalized: true,
+                parsing: false,
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                onHover: (event, activeElements, chart) => {
+                    const canvas = chart.canvas;
+                    canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    },
+                    title: {
+                        display: true,
+                    },
+                    zoom: {
+                        zoom: {
+                            wheel: {
+                                enabled: true,
+                                speed: 0.1
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            drag: {
+                                enabled: false
+                            },
+                            mode: 'x',
+                            onZoomComplete: ({chart}) => this.callbackZoom(chart)
+                        },
+                        pan: {
+                            enabled: true,
+                            mode: 'x',
+                            onPanComplete: ({chart}) => this.callbackPan(chart)
+                        },
+                        limits: {
+                            x: {
+                                min: 'original',
+                                max: 'original',
+                                minRange: this.minRange
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        },
+                        time: {
+                            unit: 'quarter',
+                            displayFormats: {
+                                day: 'dd MMM yyyy',
+                                week: 'dd MMM yyyy',
+                                month: 'MMM yyyy',
+                                quarter: 'MMM yyyy',
+                                year: 'yyyy'
+                            },
+                            tooltipFormat: 'MMM yyyy'
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        },
+                        stacked: true
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: this.yAxisTitle
+                        },
+                        beginAtZero: this.beginAtZero,
+                        stacked: true
+                    }
+                },
+                datasets: {
+                    bar: {
+                        categoryPercentage: 0.9, // Reduce space between bar groups
+                        barPercentage: 1.0, // Bars take full width of their category
+                    }
+                }
+            }
+        };
+        this.chart = new Chart(ctx, config);
+    }
+
+    renderControls() {
+        const container = document.getElementById(this.categoryTableElementId);
+        container.innerHTML = '';
+
+        // Select/Deselect all checkbox
+        const allCheckbox = document.createElement('input');
+        allCheckbox.type = 'checkbox';
+        allCheckbox.className = 'category-checkbox';
+        allCheckbox.id = this.categoryAllElementId;
+        allCheckbox.checked = this.selectedCategories.length === this.categories.length;
+        const allLabel = document.createElement('label');
+        allLabel.htmlFor = this.categoryAllElementId;
+        allLabel.textContent = 'Select/Deselect All';
+        const allTd = document.createElement('td');
+        allTd.colSpan = 2;
+        allTd.appendChild(allCheckbox);
+        allTd.appendChild(allLabel);
+        let tr = document.createElement('tr');
+        tr.appendChild(allTd);
+        container.appendChild(tr);
+
+        this.categories.forEach((category, index) => {
+            tr = document.createElement('tr');
+
+            // Country column with checkbox and color indicator
+            const sourceCell = document.createElement('td');
+            sourceCell.className = 'source-cell';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'category-checkbox';
+            checkbox.id = `${this.categoryAllElementId}-${index}`;
+            checkbox.value = category;
+            checkbox.checked = this.selectedCategories.includes(category);
+
+            const label = document.createElement('label');
+            label.className = 'category-label';
+            label.htmlFor = checkbox.id;
+
+            const colorIndicator = document.createElement('span');
+            colorIndicator.className = 'color-indicator';
+            const color = this.colors[category] || [128, 128, 128];
+            colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
+
+            const text = document.createElement('span');
+            text.textContent = category;
+
+            label.appendChild(colorIndicator);
+            label.appendChild(text);
+            sourceCell.appendChild(checkbox);
+            sourceCell.appendChild(label);
+
+            // Net import column
+            const netImportCell = document.createElement('td');
+            netImportCell.className = 'count-cell';
+            netImportCell.id = this.categoryValueElementId + index;
+
+            tr.appendChild(sourceCell);
+            tr.appendChild(netImportCell);
+            container.appendChild(tr);
+        });
+    }
+
+    updateCategories(minDate, maxDate) {
+        const averages = this.categoryAggregator(this.data, minDate, maxDate);
+        let selectedTotal = 0;
+        this.categories.forEach((category, index) => {
+            const element = document.getElementById(`${this.categoryValueElementId}${index}`);
+            if (!element) {
+                console.warn(`Category value element not found: ${this.categoryValueElementId}${index}`);
+                return;
+            }
+            element.textContent = averages[index].toFixed(1);
+            if (this.selectedCategories.includes(category)) {
+                selectedTotal += averages[index];
+            }
+        });
+        const totalElement = document.getElementById(this.categoryTotalElementId);
+        totalElement.textContent = selectedTotal.toFixed(1);
+    }
+
+    updateChart(minDate, maxDate) {
+        function aggregateByTimeUnit(data, unit) {
+            const aggregated = {};
+
+            const numFields = data[0].val.length;
+            for (const record of data) {
+                const date = new Date(record.date);
+                date.setHours(0, 0, 0, 0);
+                switch (unit) {
+                    case 'week':
+                        date.setDate(date.getDate() - date.getDay());
+                        break;
+                    case 'month':
+                        date.setDate(1);
+                        break;
+                    case 'quarter':
+                        date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
+                        break;
+                    case 'year':
+                        date.setFullYear(date.getFullYear(), 0, 1);
+                        break;
+                    default:
+                        break;
+                }
+                const key = date.getTime();
+                if (!aggregated[key]) {
+                    aggregated[key] = {
+                        date: key,
+                        val: new Array(numFields).fill(0),
+                    };
+                }
+                for (let i = 0; i < record.val.length; i++) {
+                    aggregated[key].val[i] += record.val[i];
+                }
+            }
+
+            // Create time-sorted array of aggregated data
+            return Object.values(aggregated).map(item => {
+                return {
+                    date: item.date,
+                    val: item.val
+                };
+            }).sort((a, b) => a.date - b.date);
+        }
+
+        if (fresh[this.freshKey]) { return; }
+        const chart = this.chart;
+        let currentUnit = chart.options.scales.x.time.unit;
+        const aggregatedData = aggregateByTimeUnit(this.data, currentUnit);
+
+        const datasets = [];
+
+        [...this.selectedCategories].forEach((category, _) => {
+            const categoryIndex = this.categories.indexOf(category);
+            if (categoryIndex === -1) return;
+            const color = this.colors[category] || [128, 128, 128];
+            const data = this.displayValueProcessor(aggregatedData, categoryIndex);
+
+            datasets.push({
+                label: category,
+                data: data,
+                backgroundColor: `rgba(${color.join(',')}, 0.8)`,
+                borderColor: `rgb(${color.join(',')})`,
+                borderWidth: 1,
+                stack: 'foo'
+            });
+        });
+
+        chart.data.datasets = datasets;
+        chart.options.plugins.title.text = this.chartTitle + ' (GWh ' + TIME_UNIT_NAMES[currentUnit] + ')';
+
+        // Set zoom and pan limits to data range
+        if (minDate && maxDate) {
+            chart.scales.x.min = minDate;
+            chart.scales.x.max = maxDate;
+        } else if (appState.productionChart.xmin && appState.productionChart.xmax) {
+            // Use saved bounds from state
+            chart.scales.x.min = appState.productionChart.xmin;
+            chart.scales.x.max = appState.productionChart.xmax;
+        } else {
+            // Default to full data range
+            chart.scales.x.min = aggregatedData[0].date;
+            chart.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
+        }
+        chart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
+        chart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
+        chart.update();
+        fresh[this.freshKey] = true;
+    }
+
+    callbackCategoryChange(e) {
+        const allCheckbox = document.getElementById(this.categoryAllElementId);
+        const checked = e.target.checked;
+        if (e.target.id === allCheckbox.id) {
+            // Select/deselect all
+            document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]`).forEach(cb => {
+                if (cb.id !== allCheckbox.id) cb.checked = checked;
+            });
+            appState[this.selectedCategoriesKey] = checked ? [...this.categories] : [];
+        } else {
+            appState[this.selectedCategoriesKey] = Array
+                .from(document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]:not(#${this.categoryAllElementId}):checked`))
+                .map(cb => cb.value);
+            // Sync select-all checkbox
+            const allChecked = appState[this.selectedCategoriesKey].length === this.categories.length;
+            allCheckbox.checked = allChecked;
+        }
+
+        fresh[this.freshKey] = false;
+        this.updateChart();
+        this.updateCategories();
+        serializeStateToURL();
+    }
+
+    callbackResetZoom() {
+        this.chart.resetZoom();
+    }
+
+    callbackZoom() {
+        fresh[this.freshKey] = false;
+        this.updateTimeUnit();
+        this.updateChart(this.chart.scales.x.min, this.chart.scales.x.max);
+        this.updateCategories(this.chart.scales.x.min, this.chart.scales.x.max);
+        this.state.xmin = this.chart.scales.x.min;
+        this.state.xmax = this.chart.scales.x.max;
+        serializeStateToURL();
+    }
+
+    callbackPan(chart) {
+        this.updateCategories(chart.scales.x.min, chart.scales.x.max);
+        this.state.xmin = chart.scales.x.min;
+        this.state.xmax = chart.scales.x.max;
+        serializeStateToURL();
+    }
+
+    callbackKeyDown(e) {
+        switch (e.key) {
+            case '-': case '_':
+                e.preventDefault();
+                this.chart.zoom(0.8);
+                this.callbackZoom();
+                break;
+            case '+': case '=':
+                e.preventDefault();
+                this.chart.zoom(1.2);
+                this.callbackZoom();
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                this.chart.pan({ x: 100 });
+                this.callbackPan();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                this.chart.pan({ x: -100 });
+                this.callbackPan();
+                break;
+        }
+    }
+
+    updateTimeUnit() {
+        const chart = this.chart;
+        if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
+            console.warn('Chart scales not available for time unit update');
+            return;
+        }
+
+        // chart.scales.x.{max,min} are Unix timestamps in milliseconds
+        const range = chart.scales.x.max - chart.scales.x.min;
+        const days = range / 24 / 60 / 60 / 1000;
+
+        let unit = 'quarter', tooltipFormat = 'MMM yyyy';
+        if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
+        else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
+        else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
+
+        const currentUnit = chart.options.scales.x.time.unit;
+        if (currentUnit === unit) return;
+        chart.options.scales.x.time.unit = unit;
+        chart.options.scales.x.time.tooltipFormat = tooltipFormat;
     }
 }
 
@@ -415,7 +822,7 @@ async function loadData() {
 
         console.log(`Loaded ${facilities.all.length} facilities, ${numFacilitiesWithCoords} with coordinates`);
         console.log(`Loaded ${productionData.length} days of production data`);
-        console.log(`Loaded ${tradeData.length} hours of trade data`);
+        console.log(`Loaded ${tradeData.length} days of trade data`);
     } catch (error) {
         console.error('Error loading data:', error);
 
@@ -529,156 +936,61 @@ function initializeUI() {
         });
     }
 
-    function _renderProductionCheckboxes() {
-        const container = document.getElementById('productionCategoryTableBody');
-        container.innerHTML = '';
-
-        // Select/Deselect all checkbox
-        const allCheckbox = document.createElement('input');
-        allCheckbox.type = 'checkbox';
-        allCheckbox.className = 'category-checkbox';
-        allCheckbox.id = 'prod-cat-select-all';
-        allCheckbox.checked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
-        const allLabel = document.createElement('label');
-        allLabel.htmlFor = 'prod-cat-select-all';
-        allLabel.textContent = 'Select/Deselect All';
-        const allTd = document.createElement('td');
-        allTd.colSpan = 2;
-        allTd.appendChild(allCheckbox);
-        allTd.appendChild(allLabel);
-        let tr = document.createElement('tr');
-        tr.appendChild(allTd);
-        container.appendChild(tr);
-
-        PRODUCTION_CATEGORIES.forEach((category, index) => {
-            tr = document.createElement('tr');
-
-            // Source column with checkbox and color indicator
-            const sourceCell = document.createElement('td');
-            sourceCell.className = 'source-cell';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'category-checkbox';
-            checkbox.id = `prod-cat-${index}`;
-            checkbox.value = category;
-            checkbox.checked = appState.selectedProductionCategories.includes(category);
-
-            const label = document.createElement('label');
-            label.className = 'category-label';
-            label.htmlFor = checkbox.id;
-
-            const colorIndicator = document.createElement('span');
-            colorIndicator.className = 'color-indicator';
-            const color = PRODUCTION_CATEGORY_COLORS[category] || [128, 128, 128];
-            colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
-
-            const text = document.createElement('span');
-            text.textContent = category;
-
-            label.appendChild(colorIndicator);
-            label.appendChild(text);
-            sourceCell.appendChild(checkbox);
-            sourceCell.appendChild(label);
-
-            // Average daily production column
-            const avgCell = document.createElement('td');
-            avgCell.className = 'count-cell';
-            avgCell.id = `prod-avg-${index}`;
-
-            tr.appendChild(sourceCell);
-            tr.appendChild(avgCell);
-            container.appendChild(tr);
-        });
-    }
-
-    function _renderTradeCheckboxes() {
-        const container = document.getElementById('tradeCategoryTableBody');
-        container.innerHTML = '';
-
-        // Select/Deselect all checkbox
-        const allCheckbox = document.createElement('input');
-        allCheckbox.type = 'checkbox';
-        allCheckbox.className = 'category-checkbox';
-        allCheckbox.id = 'trade-cat-select-all';
-        allCheckbox.checked = appState.selectedTradeCategories.length === TRADE_CATEGORIES.length;
-        const allLabel = document.createElement('label');
-        allLabel.htmlFor = 'trade-cat-select-all';
-        allLabel.textContent = 'Select/Deselect All';
-        const allTd = document.createElement('td');
-        allTd.colSpan = 2;
-        allTd.appendChild(allCheckbox);
-        allTd.appendChild(allLabel);
-        let tr = document.createElement('tr');
-        tr.appendChild(allTd);
-        container.appendChild(tr);
-
-        TRADE_CATEGORIES.forEach((category, index) => {
-            tr = document.createElement('tr');
-
-            // Country column with checkbox and color indicator
-            const sourceCell = document.createElement('td');
-            sourceCell.className = 'source-cell';
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'category-checkbox';
-            checkbox.id = `trade-cat-${index}`;
-            checkbox.value = category;
-            checkbox.checked = appState.selectedTradeCategories.includes(category);
-
-            const label = document.createElement('label');
-            label.className = 'category-label';
-            label.htmlFor = checkbox.id;
-
-            const colorIndicator = document.createElement('span');
-            colorIndicator.className = 'color-indicator';
-            const color = TRADE_CATEGORY_COLORS[category] || [128, 128, 128];
-            colorIndicator.style.backgroundColor = `rgb(${color.join(',')})`;
-
-            const text = document.createElement('span');
-            text.textContent = category;
-
-            label.appendChild(colorIndicator);
-            label.appendChild(text);
-            sourceCell.appendChild(checkbox);
-            sourceCell.appendChild(label);
-
-            // Net import column
-            const netImportCell = document.createElement('td');
-            netImportCell.className = 'count-cell';
-            netImportCell.id = `trade-net-${index}`;
-
-            tr.appendChild(sourceCell);
-            tr.appendChild(netImportCell);
-            container.appendChild(tr);
-        });
-    }
-
     _renderPowerSlider();
     _renderSearchInput();
     _renderFacilitiesCheckboxes();
-    _renderProductionCheckboxes();
-    _renderTradeCheckboxes();
     setupEventHandlers();
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
     filterFacilities();
 
-    createProductionChart();
-    const min = Math.max(appState.productionChart.xmin, new Date('2015-01-01').getTime());
-    const max = Math.min(appState.productionChart.xmax, new Date().getTime());
-    productionChart.options.scales.x.min = min;
-    productionChart.options.scales.x.max = max;
-    productionChart.update();
-    updateChartTimeUnit(productionChart);
-    updateProductionCategories(min, max);
+    prodConfig = {
+        canvasId: 'productionChart',
+        categories: PRODUCTION_CATEGORIES,
+        colors: PRODUCTION_CATEGORY_COLORS,
+        data: productionData,
+        state: appState.productionChart,
+        selectedCategories: appState.selectedProductionCategories,
 
-    createTradeChart();
-    const tradeMin = Math.max(appState.tradeChart.xmin, new Date('2017-01-01').getTime());
-    const tradeMax = Math.min(appState.tradeChart.xmax, new Date().getTime());
-    tradeChart.options.scales.x.min = tradeMin;
-    tradeChart.options.scales.x.max = tradeMax;
-    tradeChart.update();
-    updateChartTimeUnit(tradeChart);
-    updateTradeCategories(tradeMin, tradeMax);
+        freshKey: 'production',
+        chartTitle: 'Energy production',
+        yAxisTitle: 'Production (GWh)',
+        beginAtZero: true,
+        startDate: '2015-01-01',
+
+        categoryAggregator: productionCategoryAggregator,
+        categoryValueElementId: 'prod-avg-',
+        categoryTotalElementId: 'totalProduction',
+        categoryAllElementId: 'production-cat-select-all',
+        categoryTableElementId: 'productionCategoryTableBody',
+        resetZoomElementId: 'resetProductionZoom',
+        displayValueProcessor: productionValueProcessor,
+    }
+
+    tradeConfig = {
+        canvasId: 'tradeChart',
+        categories: TRADE_CATEGORIES,
+        colors: TRADE_CATEGORY_COLORS,
+        data: tradeData,
+        state: appState.tradeChart,
+        selectedCategories: appState.selectedTradeCategories,
+
+        freshKey: 'trade',
+        chartTitle: 'Energy trade (imports - exports)',
+        yAxisTitle: 'Net (imports - exports) (GWh)',
+        beginAtZero: false,
+        startDate: '2017-01-01',
+
+        categoryAggregator: tradeCategoryAggregator,
+        categoryValueElementId: 'trade-net-',
+        categoryTotalElementId: 'totalTrade',
+        categoryAllElementId: 'trade-cat-select-all',
+        categoryTableElementId: 'tradeCategoryTableBody',
+        resetZoomElementId: 'resetTradeZoom',
+        displayValueProcessor: tradeValueProcessor,
+    }
+
+    productionView = new TimeSeriesChart(prodConfig);
+    tradeView = new TimeSeriesChart(tradeConfig);
 
     // Initialize the correct mode
     switch (appState.currentMode) {
@@ -745,14 +1057,6 @@ function setupEventHandlers() {
     searchInput.addEventListener('input', callbackSearchInput);
 
     document.getElementById('facilitiesCategoryTableBody').addEventListener('change', callbackFacilitiesCategories);
-    document.getElementById('productionCategoryTableBody').addEventListener('change', callbackProductionCategories);
-    document.getElementById('tradeCategoryTableBody').addEventListener('change', callbackTradeCategories);
-
-    const resetZoomBtn = document.getElementById('resetZoom');
-    resetZoomBtn.addEventListener('click', callbackProductionResetZoom);
-
-    const resetTradeZoomBtn = document.getElementById('resetTradeZoom');
-    resetTradeZoomBtn.addEventListener('click', callbackTradeResetZoom);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -825,7 +1129,7 @@ function modeProduction() {
     document.getElementById('tradeView').style.display = 'none';
 
     // Initialize or update the chart
-    updateProductionChart();
+    productionView.updateChart();
 }
 
 function modeTrade() {
@@ -852,7 +1156,7 @@ function modeTrade() {
     document.getElementById('tradeView').style.display = 'block';
 
     // Initialize or update the chart
-    updateTradeChart();
+    tradeView.updateChart();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1278,623 +1582,62 @@ function filterFacilities() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Production mode
+// Helpers for time series charts
 ///////////////////////////////////////////////////////////////////////////////
 
-function callbackProductionCategories(e) {
-    const allCheckbox = document.getElementById('prod-cat-select-all');
-    if (e.target.type !== 'checkbox') { return; }
-    const checked = e.target.checked;
-    if (e.target.id === allCheckbox.id) {
-        // Select/deselect all
-        document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]').forEach(cb => {
-            if (cb.id !== allCheckbox.id) cb.checked = checked;
-        });
-        appState.selectedProductionCategories = checked ? [...PRODUCTION_CATEGORIES] : [];
-    } else {
-        appState.selectedProductionCategories = Array
-            .from(document.querySelectorAll('#productionCategoryTableBody input[type="checkbox"]:not(#prod-cat-select-all):checked'))
-            .map(cb => cb.value);
-        // Sync select-all checkbox
-        const allChecked = appState.selectedProductionCategories.length === PRODUCTION_CATEGORIES.length;
-        allCheckbox.checked = allChecked;
-    }
-    fresh.production = false;
-    updateProductionChart();
-    updateProductionCategories();
-    serializeStateToURL();
-}
-
-function callbackProductionResetZoom() {
-    productionChart.resetZoom();
-}
-
-function callbackProductionPan(chart) {
-    updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
-    appState.productionChart.xmin = chart.scales.x.min;
-    appState.productionChart.xmax = chart.scales.x.max;
-    serializeStateToURL();
-}
-
-function callbackProductionZoom(chart) {
-    fresh.production = false;
-    updateChartTimeUnit(chart);
-    updateProductionChart(chart.scales.x.min, chart.scales.x.max);
-    updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
-    appState.productionChart.xmin = chart.scales.x.min;
-    appState.productionChart.xmax = chart.scales.x.max;
-    serializeStateToURL();
-}
-
-function callbackProductionKeyDown(e) {
-    switch (e.key) {
-        case '-': case '_':
-            e.preventDefault();
-            productionChart.zoom(0.8);
-            callbackProductionZoom(productionChart);
-            break;
-        case '+': case '=':
-            e.preventDefault();
-            productionChart.zoom(1.2);
-            callbackProductionZoom(productionChart);
-            break;
-        case 'ArrowLeft':
-            e.preventDefault();
-            productionChart.pan({ x: 100 });
-            callbackProductionPan(productionChart);
-            break;
-        case 'ArrowRight':
-            e.preventDefault();
-            productionChart.pan({ x: -100 });
-            callbackProductionPan(productionChart);
-            break;
-    }
-}
-
-function createProductionChart() {
-    const ctx = document.getElementById('productionChart').getContext('2d');
-
-    productionChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            datasets: []
-        },
-        options: {
-            animation: false,
-            normalized: true,
-            parsing: false,
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
-            onHover: (event, activeElements, chart) => {
-                const canvas = chart.canvas;
-                canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
-            },
-            plugins: {
-                legend: {
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Swiss energy production over time'
-                },
-                zoom: {
-                    zoom: {
-                        wheel: {
-                            enabled: true,
-                            speed: 0.1
-                        },
-                        pinch: {
-                            enabled: true
-                        },
-                        drag: {
-                            enabled: false
-                        },
-                        mode: 'x',
-                        onZoomComplete: ({chart}) => callbackProductionZoom(chart)
-                    },
-                    pan: {
-                        enabled: true,
-                        mode: 'x',
-                        onPanComplete: ({chart}) => callbackProductionPan(chart)
-                    },
-                    limits: {
-                        x: {
-                            min: 'original',
-                            max: 'original',
-                            minRange: 7 * 24 * 60 * 60 * 1000,
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    ticks: {
-                        maxRotation: 45,
-                        minRotation: 45,
-                    },
-                    time: {
-                        unit: 'quarter',
-                        displayFormats: {
-                            day: 'dd MMM yyyy',
-                            week: 'dd MMM yyyy',
-                            month: 'MMM yyyy',
-                            quarter: 'MMM yyyy',
-                            year: 'yyyy'
-                        },
-                        tooltipFormat: 'MMM yyyy'
-                    },
-                    title: {
-                        display: true,
-                        text: 'Date'
-                    },
-                    stacked: true
-                },
-                y: {
-                    title: {
-                        display: true,
-                        text: 'Production (GWh)'
-                    },
-                    beginAtZero: true,
-                    stacked: true
-                }
-            },
-            datasets: {
-                bar: {
-                    categoryPercentage: 0.9, // Reduce space between bar groups
-                    barPercentage: 1.0, // Bars take full width of their category
-                }
-            },
-        }
-    });
-    document.addEventListener('keydown', callbackProductionKeyDown);
-}
-
-function updateProductionCategories(minDate, maxDate) {
-    const totals = new Array(6).fill(0);
+function productionCategoryAggregator(data, minDate, maxDate) {
+    const aves = new Array(PRODUCTION_CATEGORIES.length).fill(0);
     let count = 0;
 
-    productionData.forEach(record => {
-        if (record.date < minDate || record.date > maxDate) return;
-        record.val.forEach((value, index) => {
-            totals[index] += value;
-        });
-        count++;
-    });
-
-    let total = 0;
-    PRODUCTION_CATEGORIES.forEach((category, index) => {
-        const avg = totals[index] / count;
-        document.getElementById(`prod-avg-${index}`).textContent = avg.toFixed(1);
-        if (appState.selectedProductionCategories.includes(category)) {
-            total += avg;
-        }
-    });
-    document.getElementById('totalProduction').textContent = total.toFixed(1);
-}
-
-function updateProductionChart(minDate, maxDate) {
-    function aggregateByTimeUnit(unit) {
-        const aggregated = {};
-
-        const numFields = productionData[0].val.length;
-        productionData.forEach(record => {
-            const date = new Date(record.date);
-            date.setHours(0, 0, 0, 0);
-            switch (unit) {
-                case 'week':
-                    date.setDate(date.getDate() - date.getDay());
-                    break;
-                case 'month':
-                    date.setDate(1);
-                    break;
-                case 'quarter':
-                    date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
-                    break;
-                case 'year':
-                    date.setFullYear(date.getFullYear(), 0, 1);
-                    break;
-                default:
-                    break;
-            }
-            const key = date.getTime();
-            if (!aggregated[key]) {
-                aggregated[key] = {
-                    date: key,
-                    val: new Array(numFields).fill(0),
-                    count: 0
-                };
-            }
-            record.val.forEach((value, index) => {
-                aggregated[key].val[index] += value;
-            });
-            aggregated[key].count += 1;
-        });
-
-        // Create time-sorted array of aggregated data
-        return Object.values(aggregated).map(item => {
-            return {
-                date: item.date,
-                val: item.val
-            };
-        }).sort((a, b) => a.date - b.date);
-    }
-
-    if (fresh.production) { return; }
-
-    let currentUnit = productionChart.options.scales.x.time.unit;
-
-    const aggregatedData = aggregateByTimeUnit(currentUnit);
-    const datasets = [];
-
-    [...appState.selectedProductionCategories].forEach((category, index) => {
-        const categoryIndex = PRODUCTION_CATEGORIES.indexOf(category);
-        if (categoryIndex === -1) return;
-        const color = PRODUCTION_CATEGORY_COLORS[category] || [128, 128, 128];
-
-        const data = aggregatedData.map(record => ({
-            x: record.date,
-            y: record.val[categoryIndex]
-        }));
-
-        datasets.push({
-            label: category,
-            data: data,
-            backgroundColor: `rgba(${color.join(',')}, 0.8)`,
-            borderColor: `rgb(${color.join(',')})`,
-            borderWidth: 1,
-            stack: 'production'
-        });
-    });
-
-    productionChart.data.datasets = datasets;
-    productionChart.options.plugins.title.text = `Energy production (GWh ${TIME_UNIT_NAMES[currentUnit]})`;
-
-    // Set zoom and pan limits to data range
-    if (minDate && maxDate) {
-        productionChart.scales.x.min = minDate;
-        productionChart.scales.x.max = maxDate;
-    } else if (appState.productionChart.xmin && appState.productionChart.xmax) {
-        // Use saved bounds from state
-        productionChart.scales.x.min = appState.productionChart.xmin;
-        productionChart.scales.x.max = appState.productionChart.xmax;
-    } else {
-        // Default to full data range
-        productionChart.scales.x.min = aggregatedData[0].date;
-        productionChart.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
-    }
-    productionChart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
-    productionChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
-    productionChart.update();
-    fresh.production = true;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Trade mode
-///////////////////////////////////////////////////////////////////////////////
-
-function callbackTradeCategories(e) {
-    const allCheckbox = document.getElementById('trade-cat-select-all');
-    if (e.target.type !== 'checkbox') { return; }
-    const checked = e.target.checked;
-    if (e.target.id === allCheckbox.id) {
-        // Select/deselect all
-        document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]').forEach(cb => {
-            if (cb.id !== allCheckbox.id) cb.checked = checked;
-        });
-        appState.selectedTradeCategories = checked ? [...TRADE_CATEGORIES] : [];
-    } else {
-        appState.selectedTradeCategories = Array
-            .from(document.querySelectorAll('#tradeCategoryTableBody input[type="checkbox"]:not(#trade-cat-select-all):checked'))
-            .map(cb => cb.value);
-        // Sync select-all checkbox
-        const allChecked = appState.selectedTradeCategories.length === TRADE_CATEGORIES.length;
-        allCheckbox.checked = allChecked;
-    }
-    fresh.trade = false;
-    updateTradeChart();
-    updateTradeCategories();
-    serializeStateToURL();
-}
-
-function callbackTradeResetZoom() {
-    tradeChart.resetZoom();
-}
-
-function callbackTradePan(chart) {
-    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
-    appState.tradeChart.xmin = chart.scales.x.min;
-    appState.tradeChart.xmax = chart.scales.x.max;
-    serializeStateToURL();
-}
-
-function callbackTradeZoom(chart) {
-    fresh.trade = false;
-    updateChartTimeUnit(chart);
-    updateTradeChart(chart.scales.x.min, chart.scales.x.max);
-    updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
-    appState.tradeChart.xmin = chart.scales.x.min;
-    appState.tradeChart.xmax = chart.scales.x.max;
-    serializeStateToURL();
-}
-
-function callbackTradeKeyDown(e) {
-    switch (e.key) {
-        case '-': case '_':
-            e.preventDefault();
-            tradeChart.zoom(0.8);
-            callbackTradeZoom(tradeChart);
-            break;
-        case '+': case '=':
-            e.preventDefault();
-            tradeChart.zoom(1.2);
-            callbackTradeZoom(tradeChart);
-            break;
-        case 'ArrowLeft':
-            e.preventDefault();
-            tradeChart.pan({ x: 100 });
-            callbackTradePan(tradeChart);
-            break;
-        case 'ArrowRight':
-            e.preventDefault();
-            tradeChart.pan({ x: -100 });
-            callbackTradePan(tradeChart);
-            break;
-    }
-}
-
-function createTradeChart() {
-    const ctx = document.getElementById('tradeChart').getContext('2d');
-
-    tradeChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            datasets: []
-        },
-        options: {
-            animation: false,
-            normalized: true,
-            parsing: false,
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
-            onHover: (event, activeElements, chart) => {
-                const canvas = chart.canvas;
-                canvas.style.cursor = activeElements.length > 0 ? 'pointer' : 'grab';
-            },
-            plugins: {
-                legend: {
-                    position: 'top',
-                },
-                title: {
-                    display: true,
-                    text: 'Swiss energy trade over time'
-                },
-                zoom: {
-                    zoom: {
-                        wheel: {
-                            enabled: true,
-                            speed: 0.1
-                        },
-                        pinch: {
-                            enabled: true
-                        },
-                        drag: {
-                            enabled: false
-                        },
-                        mode: 'x',
-                        onZoomComplete: ({chart}) => callbackTradeZoom(chart)
-                    },
-                    pan: {
-                        enabled: true,
-                        mode: 'x',
-                        onPanComplete: ({chart}) => callbackTradePan(chart)
-                    },
-                    limits: {
-                        x: {
-                            min: 'original',
-                            max: 'original',
-                            minRange: 7 * 24 * 60 * 60 * 1000, // 1 week minimum
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    ticks: {
-                        maxRotation: 45,
-                        minRotation: 45,
-                    },
-                    time: {
-                        unit: 'month',
-                        displayFormats: {
-                            day: 'dd MMM yyyy',
-                            week: 'dd MMM yyyy',
-                            month: 'MMM yyyy',
-                            quarter: 'MMM yyyy',
-                            year: 'yyyy'
-                        },
-                        tooltipFormat: 'MMM yyyy'
-                    },
-                    title: {
-                        display: true,
-                        text: 'Date'
-                    },
-                    stacked: true
-                },
-                y: {
-                    title: {
-                        display: true,
-                        text: 'Net Import/Export (GWh)'
-                    },
-                    // Center the y-axis at 0 for import/export visualization
-                    beginAtZero: false,
-                    stacked: true
-                }
-            },
-            datasets: {
-                bar: {
-                    categoryPercentage: 0.9,
-                    barPercentage: 1.0,
-                }
-            },
-        }
-    });
-
-    document.addEventListener('keydown', callbackTradeKeyDown);
-}
-
-function updateTradeCategories(minDate, maxDate) {
-    const totals = new Array(4).fill(0); // 4 countries
-    let count = 0;
-
-    tradeData.forEach(record => {
-        if (record.date < minDate || record.date > maxDate) return;
+    for (const record of data) {
+        if (record.date < minDate || record.date > maxDate) continue;
         for (let i = 0; i < 4; i++) {
-            totals[i] += (record.val[i] - record.val[i + 4]) / 1000; // imports @i, exports @i+4
+            aves[i] += record.val[i];
         }
         count++;
-    });
+    }
+    for (let i = 0; i < aves.length; i++) {
+        aves[i] /= count;
+    }
+    return aves;
+}
 
-    let total = 0;
-    TRADE_CATEGORIES.forEach((category, index) => {
-        const avgNet = totals[index] / count;
-        document.getElementById(`trade-net-${index}`).textContent = avgNet.toFixed(1);
-        if (appState.selectedTradeCategories.includes(category)) {
-            total += avgNet;
+function tradeCategoryAggregator(data, minDate, maxDate) {
+    const aves = new Array(TRADE_CATEGORIES.length).fill(0);
+    let count = 0;
+
+    for (const record of data) {
+        if (record.date < minDate || record.date > maxDate) continue;
+        for (let i = 0; i < 4; i++) {
+            aves[i] += (record.val[i] - record.val[i + 4]) / 1000; // imports @i, exports @i+4
         }
-    });
-    document.getElementById('totalTrade').textContent = total.toFixed(1);
+        count++;
+    }
+    for (let i = 0; i < aves.length; i++) {
+        aves[i] /= count;
+    }
+    return aves;
 }
 
-function updateTradeChart(minDate, maxDate) {
-    function aggregateByTimeUnit(unit) {
-        const aggregated = {};
-
-        const numFields = tradeData[0].val.length;
-        tradeData.forEach(record => {
-            const date = new Date(record.date);
-            date.setHours(0, 0, 0, 0); // Round to day
-            switch (unit) {
-                case 'week':
-                    date.setDate(date.getDate() - date.getDay());
-                    break;
-                case 'month':
-                    date.setDate(1);
-                    break;
-                case 'quarter':
-                    date.setFullYear(date.getFullYear(), Math.floor(date.getMonth() / 3) * 3, 1);
-                    break;
-                case 'year':
-                    date.setFullYear(date.getFullYear(), 0, 1);
-                    break;
-                default: // day
-                    break;
-            }
-            const key = date.getTime();
-            if (!aggregated[key]) {
-                aggregated[key] = {
-                    date: key,
-                    val: new Array(numFields).fill(0),
-                    count: 0
-                };
-            }
-            record.val.forEach((value, index) => {
-                aggregated[key].val[index] += value;
-            });
-            aggregated[key].count += 1;
-        });
-
-        // Create time-sorted array of aggregated data
-        return Object.values(aggregated).map(item => {
-            return {
-                date: item.date,
-                val: item.val
-            };
-        }).sort((a, b) => a.date - b.date);
+function productionValueProcessor(data, categoryIndex) {
+    const v = new Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+        v[i] = {
+            x: data[i].date,
+            y: data[i].val[categoryIndex]
+        };
     }
-
-    if (fresh.trade) { return; }
-
-    let currentUnit = tradeChart.options.scales.x.time.unit;
-
-    const aggregatedData = aggregateByTimeUnit(currentUnit);
-    const datasets = [];
-
-    [...appState.selectedTradeCategories].forEach((category, index) => {
-        const categoryIndex = TRADE_CATEGORIES.indexOf(category);
-        if (categoryIndex === -1) return;
-        const color = TRADE_CATEGORY_COLORS[category] || [128, 128, 128];
-
-        const data = aggregatedData.map(record => {
-            const netTrade = (record.val[categoryIndex] - record.val[categoryIndex + 4]) / 1000; // Convert MWh to GWh
-            return {
-                x: record.date,
-                y: Math.round(netTrade * 10) / 10
-            };
-        });
-
-        datasets.push({
-            label: `${category}`,
-            data: data,
-            backgroundColor: `rgba(${color.join(',')}, 0.8)`,
-            borderColor: `rgb(${color.join(',')})`,
-            borderWidth: 1,
-            stack: 'trade'
-        });
-    });
-
-    tradeChart.data.datasets = datasets;
-    tradeChart.options.plugins.title.text = `Energy trade (imports - exports, GWh ${TIME_UNIT_NAMES[currentUnit]})`;
-
-    // Set zoom and pan limits to data range
-    if (minDate && maxDate) {
-        tradeChart.scales.x.min = minDate;
-        tradeChart.scales.x.max = maxDate;
-    } else if (appState.tradeChart.xmin && appState.tradeChart.xmax) {
-        // Use saved bounds from state
-        tradeChart.scales.x.min = appState.tradeChart.xmin;
-        tradeChart.scales.x.max = appState.tradeChart.xmax;
-    } else if (aggregatedData.length > 0) {
-        // Default to full data range
-        tradeChart.scales.x.min = aggregatedData[0].date;
-        tradeChart.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
-    }
-    tradeChart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
-    tradeChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
-    tradeChart.update();
-    fresh.trade = true;
+    return v;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Common code for time-series charts
-///////////////////////////////////////////////////////////////////////////////
-
-function updateChartTimeUnit(chart) {
-    if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
-        console.warn('Chart scales not available for time unit update');
-        return;
+function tradeValueProcessor(data, categoryIndex) {
+    const v = new Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+        const netTrade = (data[i].val[categoryIndex] - data[i].val[categoryIndex + 4]) / 1000; // Convert MWh to GWh
+        v[i] = {
+            x: data[i].date,
+            y: Math.round(netTrade * 10) / 10
+        };
     }
-
-    // chart.scales.x.{max,min} are Unix timestamps in milliseconds
-    const range = chart.scales.x.max - chart.scales.x.min;
-    const days = range / 24 / 60 / 60 / 1000;
-
-    let unit = 'quarter', tooltipFormat = 'MMM yyyy';
-    if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
-    else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
-    else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
-
-    const currentUnit = chart.options.scales.x.time.unit;
-    if (currentUnit === unit) return;
-    chart.options.scales.x.time.unit = unit;
-    chart.options.scales.x.time.tooltipFormat = tooltipFormat;
+    return v;
 }
