@@ -1073,114 +1073,44 @@ function callbackModeAbout() {
     serializeStateToURL();
 }
 
+function activate(mode, controls) {
+    document.querySelectorAll('.tab-button').forEach(el => el.classList.remove('active'));
+    document.getElementById(mode + 'Tab').classList.add('active');
+    document.querySelectorAll('.mode').forEach(el => el.style.display = 'none');
+    document.getElementById(mode + 'Mode').style.display = 'block';
+
+    document.querySelectorAll('.control-section').forEach(el => el.style.display = 'none');
+    if (controls) {
+        document.querySelectorAll('.' + controls).forEach(el => el.style.display = 'block');
+    }
+}
+
+function setAnnotations() {
+    document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
+    document.getElementById('annotations').innerHTML = lastUpdate ? `Last data update: ${lastUpdate}` : '';
+}
+
 function modeFacilities() {
-    const facilitiesTab = document.getElementById('facilitiesTab');
-    const productionTab = document.getElementById('productionTab');
-    const tradeTab = document.getElementById('tradeTab');
-    const aboutTab = document.getElementById('aboutTab');
-    facilitiesTab.classList.add('active');
-    productionTab.classList.remove('active');
-    tradeTab.classList.remove('active');
-    aboutTab.classList.remove('active');
-
-    // Show facilities controls, hide others
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'none');
-
-    // Hide other views
-    document.getElementById('productionView').style.display = 'none';
-    document.getElementById('tradeView').style.display = 'none';
-    document.getElementById('aboutView').style.display = 'none';
-
+    activate('facilities', 'facilities-controls');
     renderFacilitiesToggle();
     renderFacilities();
 }
 
 function modeProduction() {
-    const facilitiesTab = document.getElementById('facilitiesTab');
-    const productionTab = document.getElementById('productionTab');
-    const tradeTab = document.getElementById('tradeTab');
-    const aboutTab = document.getElementById('aboutTab');
-    facilitiesTab.classList.remove('active');
-    productionTab.classList.add('active');
-    tradeTab.classList.remove('active');
-    aboutTab.classList.remove('active');
-
-    // Annotation here is just the last update date
-    document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
-    document.getElementById('annotations').innerHTML = lastUpdate ? `Last data update: ${lastUpdate}` : '';
-
-    // Hide other controls, show production controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'block');
-    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'none');
-
-    // Show production view, hide others
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('tableView').style.display = 'none';
-    document.getElementById('productionView').style.display = 'block';
-    document.getElementById('tradeView').style.display = 'none';
-    document.getElementById('aboutView').style.display = 'none';
-
-    // Initialize or update the chart
+    activate('production', 'production-controls');
+    setAnnotations();
     productionView.updateChart();
 }
 
 function modeTrade() {
-    const facilitiesTab = document.getElementById('facilitiesTab');
-    const productionTab = document.getElementById('productionTab');
-    const tradeTab = document.getElementById('tradeTab');
-    const aboutTab = document.getElementById('aboutTab');
-    facilitiesTab.classList.remove('active');
-    productionTab.classList.remove('active');
-    tradeTab.classList.add('active');
-    aboutTab.classList.remove('active');
-
-    // Annotation here is just the last update date
-    document.getElementById('annotations').style.display = lastUpdate ? 'block' : 'none';
-    document.getElementById('annotations').innerHTML = lastUpdate ? `Last data update: ${lastUpdate}` : '';
-
-    // Hide other controls, show trade controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'block');
-
-    // Show trade view, hide others
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('tableView').style.display = 'none';
-    document.getElementById('productionView').style.display = 'none';
-    document.getElementById('tradeView').style.display = 'block';
-    document.getElementById('aboutView').style.display = 'none';
-
-    // Initialize or update the chart
+    activate('trade', 'trade-controls');
+    setAnnotations();
     tradeView.updateChart();
 }
 
 function modeAbout() {
-    const facilitiesTab = document.getElementById('facilitiesTab');
-    const productionTab = document.getElementById('productionTab');
-    const tradeTab = document.getElementById('tradeTab');
-    const aboutTab = document.getElementById('aboutTab');
-    facilitiesTab.classList.remove('active');
-    productionTab.classList.remove('active');
-    tradeTab.classList.remove('active');
-    aboutTab.classList.add('active');
-
-    // Hide annotations
+    activate('about', null);
     document.getElementById('annotations').style.display = 'none';
-
-    // Hide all controls
-    document.querySelectorAll('.facilities-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.production-controls').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.trade-controls').forEach(el => el.style.display = 'none');
-
-    // Show about view, hide others
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('tableView').style.display = 'none';
-    document.getElementById('productionView').style.display = 'none';
-    document.getElementById('tradeView').style.display = 'none';
-    document.getElementById('aboutView').style.display = 'block';
 }
 
 ///////////////////////////////////////////////////////////////////////////////
