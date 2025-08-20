@@ -317,7 +317,7 @@ def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
                     values += [lat, lon]
 
                 all_fields = dict(zip(keys, values))
-                facility = {field: all_fields[field] for field in REQUIRED_FIELDS if field in all_fields}
+                facility = [ all_fields[field] for field in REQUIRED_FIELDS ]
                 facilities.append(facility)
             except Exception as e:
                 logger.warning("Error processing facility row %d: %s", i, e)
