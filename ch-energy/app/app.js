@@ -1460,7 +1460,7 @@ function updateProductionCategories(minDate, maxDate) {
 
     productionData.forEach(record => {
         if (record.date < minDate || record.date > maxDate) return;
-        record.prod.forEach((value, index) => {
+        record.val.forEach((value, index) => {
             totals[index] += value;
         });
         count++;
@@ -1481,6 +1481,7 @@ function updateProductionChart(minDate, maxDate) {
     function aggregateByTimeUnit(unit) {
         const aggregated = {};
 
+        const numFields = productionData[0].val.length;
         productionData.forEach(record => {
             const date = new Date(record.date);
             date.setHours(0, 0, 0, 0);
@@ -1504,12 +1505,12 @@ function updateProductionChart(minDate, maxDate) {
             if (!aggregated[key]) {
                 aggregated[key] = {
                     date: key,
-                    prod: new Array(6).fill(0),
+                    val: new Array(numFields).fill(0),
                     count: 0
                 };
             }
-            record.prod.forEach((value, index) => {
-                aggregated[key].prod[index] += value;
+            record.val.forEach((value, index) => {
+                aggregated[key].val[index] += value;
             });
             aggregated[key].count += 1;
         });
@@ -1518,7 +1519,7 @@ function updateProductionChart(minDate, maxDate) {
         return Object.values(aggregated).map(item => {
             return {
                 date: item.date,
-                prod: item.prod
+                val: item.val
             };
         }).sort((a, b) => a.date - b.date);
     }
@@ -1537,7 +1538,7 @@ function updateProductionChart(minDate, maxDate) {
 
         const data = aggregatedData.map(record => ({
             x: record.date,
-            y: record.prod[categoryIndex]
+            y: record.val[categoryIndex]
         }));
 
         datasets.push({
@@ -1758,14 +1759,14 @@ function updateTradeCategories(minDate, maxDate) {
     tradeData.forEach(record => {
         if (record.date < minDate || record.date > maxDate) return;
         for (let i = 0; i < 4; i++) {
-            totals[i] += (record.trade[i] - record.trade[i + 4]) / 1000; // imports @i, exports @i+4
+            totals[i] += (record.val[i] - record.val[i + 4]) / 1000; // imports @i, exports @i+4
         }
         count++;
     });
 
     let total = 0;
     TRADE_CATEGORIES.forEach((category, index) => {
-        const avgNet = totals[index] / (count / 24); // Convert to daily average
+        const avgNet = totals[index] / count;
         document.getElementById(`trade-net-${index}`).textContent = avgNet.toFixed(1);
         if (appState.selectedTradeCategories.includes(category)) {
             total += avgNet;
@@ -1778,6 +1779,7 @@ function updateTradeChart(minDate, maxDate) {
     function aggregateByTimeUnit(unit) {
         const aggregated = {};
 
+        const numFields = tradeData[0].val.length;
         tradeData.forEach(record => {
             const date = new Date(record.date);
             date.setHours(0, 0, 0, 0); // Round to day
@@ -1801,12 +1803,12 @@ function updateTradeChart(minDate, maxDate) {
             if (!aggregated[key]) {
                 aggregated[key] = {
                     date: key,
-                    trade: new Array(8).fill(0),
+                    val: new Array(numFields).fill(0),
                     count: 0
                 };
             }
-            record.trade.forEach((value, index) => {
-                aggregated[key].trade[index] += value;
+            record.val.forEach((value, index) => {
+                aggregated[key].val[index] += value;
             });
             aggregated[key].count += 1;
         });
@@ -1815,7 +1817,7 @@ function updateTradeChart(minDate, maxDate) {
         return Object.values(aggregated).map(item => {
             return {
                 date: item.date,
-                trade: item.trade
+                val: item.val
             };
         }).sort((a, b) => a.date - b.date);
     }
@@ -1833,7 +1835,7 @@ function updateTradeChart(minDate, maxDate) {
         const color = TRADE_CATEGORY_COLORS[category] || [128, 128, 128];
 
         const data = aggregatedData.map(record => {
-            const netTrade = (record.trade[categoryIndex] - record.trade[categoryIndex + 4]) / 1000; // Convert MWh to GWh
+            const netTrade = (record.val[categoryIndex] - record.val[categoryIndex + 4]) / 1000; // Convert MWh to GWh
             return {
                 x: record.date,
                 y: Math.round(netTrade * 10) / 10
