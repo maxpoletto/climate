@@ -668,7 +668,7 @@ function initializeUI() {
     productionChart.options.scales.x.min = min;
     productionChart.options.scales.x.max = max;
     productionChart.update();
-    updateProductionTimeUnit(productionChart);
+    updateChartTimeUnit(productionChart);
     updateProductionCategories(min, max);
 
     createTradeChart();
@@ -677,7 +677,7 @@ function initializeUI() {
     tradeChart.options.scales.x.min = tradeMin;
     tradeChart.options.scales.x.max = tradeMax;
     tradeChart.update();
-    updateTradeTimeUnit(tradeChart);
+    updateChartTimeUnit(tradeChart);
     updateTradeCategories(tradeMin, tradeMax);
 
     // Initialize the correct mode
@@ -1318,7 +1318,7 @@ function callbackProductionPan(chart) {
 
 function callbackProductionZoom(chart) {
     fresh.production = false;
-    updateProductionTimeUnit(chart);
+    updateChartTimeUnit(chart);
     updateProductionChart(chart.scales.x.min, chart.scales.x.max);
     updateProductionCategories(chart.scales.x.min, chart.scales.x.max);
     appState.productionChart.xmin = chart.scales.x.min;
@@ -1452,27 +1452,6 @@ function createProductionChart() {
         }
     });
     document.addEventListener('keydown', callbackProductionKeyDown);
-}
-
-function updateProductionTimeUnit(chart) {
-    if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
-        console.warn('Chart scales not available for time unit update');
-        return;
-    }
-
-    // chart.scales.x.{max,min} are Unix timestamps in milliseconds
-    const range = chart.scales.x.max - chart.scales.x.min;
-    const days = range / 24 / 60 / 60 / 1000;
-
-    let unit = 'quarter', tooltipFormat = 'MMM yyyy';
-    if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
-    else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
-    else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
-
-    const currentUnit = chart.options.scales.x.time.unit;
-    if (currentUnit === unit) return;
-    chart.options.scales.x.time.unit = unit;
-    chart.options.scales.x.time.tooltipFormat = tooltipFormat;
 }
 
 function updateProductionCategories(minDate, maxDate) {
@@ -1634,7 +1613,7 @@ function callbackTradePan(chart) {
 
 function callbackTradeZoom(chart) {
     fresh.trade = false;
-    updateTradeTimeUnit(chart);
+    updateChartTimeUnit(chart);
     updateTradeChart(chart.scales.x.min, chart.scales.x.max);
     updateTradeCategories(chart.scales.x.min, chart.scales.x.max);
     appState.tradeChart.xmin = chart.scales.x.min;
@@ -1772,27 +1751,6 @@ function createTradeChart() {
     document.addEventListener('keydown', callbackTradeKeyDown);
 }
 
-function updateTradeTimeUnit(chart) {
-    if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
-        console.warn('Chart scales not available for time unit update');
-        return;
-    }
-
-    // chart.scales.x.{max,min} are Unix timestamps in milliseconds
-    const range = chart.scales.x.max - chart.scales.x.min;
-    const days = range / 24 / 60 / 60 / 1000;
-
-    let unit = 'quarter', tooltipFormat = 'MMM yyyy';
-    if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
-    else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
-    else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
-
-    const currentUnit = chart.options.scales.x.time.unit;
-    if (currentUnit === unit) return;
-    chart.options.scales.x.time.unit = unit;
-    chart.options.scales.x.time.tooltipFormat = tooltipFormat;
-}
-
 function updateTradeCategories(minDate, maxDate) {
     const totals = new Array(4).fill(0); // 4 countries
     let count = 0;
@@ -1912,4 +1870,29 @@ function updateTradeChart(minDate, maxDate) {
     tradeChart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
     tradeChart.update();
     fresh.trade = true;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Common code for time-series charts
+///////////////////////////////////////////////////////////////////////////////
+
+function updateChartTimeUnit(chart) {
+    if (!chart || !chart.scales || !chart.scales.x || !chart.scales.x.max || !chart.scales.x.min) {
+        console.warn('Chart scales not available for time unit update');
+        return;
+    }
+
+    // chart.scales.x.{max,min} are Unix timestamps in milliseconds
+    const range = chart.scales.x.max - chart.scales.x.min;
+    const days = range / 24 / 60 / 60 / 1000;
+
+    let unit = 'quarter', tooltipFormat = 'MMM yyyy';
+    if (days <= 90) { unit = 'day'; tooltipFormat = 'dd MMM yyyy'; }
+    else if (days <= 365) { unit = 'week'; tooltipFormat = 'dd MMM yyyy'; }
+    else if (days <= 1095) { unit = 'month'; tooltipFormat = 'MMM yyyy'; } // 3 years
+
+    const currentUnit = chart.options.scales.x.time.unit;
+    if (currentUnit === unit) return;
+    chart.options.scales.x.time.unit = unit;
+    chart.options.scales.x.time.tooltipFormat = tooltipFormat;
 }
