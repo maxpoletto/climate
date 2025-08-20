@@ -54,17 +54,17 @@ const PRODUCTION_CATEGORIES = [
 // Trade categories (countries Switzerland trades with)
 const TRADE_CATEGORIES = [
     'Austria',
-    'France',
     'Germany',
+    'France',
     'Italy'
 ];
 
 // Color palette for trade categories (countries)
 const TRADE_CATEGORY_COLORS = {
-    'Austria': [244, 67, 54],       // Red
-    'Germany': [255, 193, 7],       // Amber
-    'France': [33, 150, 243],       // Blue
-    'Italy': [76, 175, 80]          // Green
+    'Austria': [244, 67, 54],      // Red
+    'Germany': [255, 193, 7],      // Amber
+    'France':  [33, 150, 243],     // Blue
+    'Italy': [76, 175, 80]         // Green
 };
 
 const TABLE_COLUMNS = ["SubCategory", "TotalPower", "Municipality", "Canton", "BeginningOfOperation", "gps"];
@@ -1326,6 +1326,31 @@ function callbackProductionZoom(chart) {
     serializeStateToURL();
 }
 
+function callbackProductionKeyDown(e) {
+    switch (e.key) {
+        case '-': case '_':
+            e.preventDefault();
+            productionChart.zoom(0.8);
+            callbackProductionZoom(productionChart);
+            break;
+        case '+': case '=':
+            e.preventDefault();
+            productionChart.zoom(1.2);
+            callbackProductionZoom(productionChart);
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            productionChart.pan({ x: 100 });
+            callbackProductionPan(productionChart);
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            productionChart.pan({ x: -100 });
+            callbackProductionPan(productionChart);
+            break;
+    }
+}
+
 function createProductionChart() {
     const ctx = document.getElementById('productionChart').getContext('2d');
 
@@ -1426,32 +1451,7 @@ function createProductionChart() {
             },
         }
     });
-    window.productionChartKeyListener = (e) => {
-        if (!appState.isProductionMode || !productionChart) return;
-        switch (e.key) {
-            case '-': case '_':
-                e.preventDefault();
-                productionChart.zoom(0.8);
-                callbackProductionZoom(productionChart);
-                break;
-            case '+': case '=':
-                e.preventDefault();
-                productionChart.zoom(1.2);
-                callbackProductionZoom(productionChart);
-                break;
-            case 'ArrowLeft':
-                e.preventDefault();
-                productionChart.pan({ x: 100 });
-                callbackProductionPan(productionChart);
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                productionChart.pan({ x: -100 });
-                callbackProductionPan(productionChart);
-                break;
-        }
-    };
-    document.addEventListener('keydown', window.productionChartKeyListener);
+    document.addEventListener('keydown', callbackProductionKeyDown);
 }
 
 function updateProductionTimeUnit(chart) {
@@ -1642,6 +1642,31 @@ function callbackTradeZoom(chart) {
     serializeStateToURL();
 }
 
+function callbackTradeKeyDown(e) {
+    switch (e.key) {
+        case '-': case '_':
+            e.preventDefault();
+            tradeChart.zoom(0.8);
+            callbackTradeZoom(tradeChart);
+            break;
+        case '+': case '=':
+            e.preventDefault();
+            tradeChart.zoom(1.2);
+            callbackTradeZoom(tradeChart);
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            tradeChart.pan({ x: 100 });
+            callbackTradePan(tradeChart);
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            tradeChart.pan({ x: -100 });
+            callbackTradePan(tradeChart);
+            break;
+    }
+}
+
 function createTradeChart() {
     const ctx = document.getElementById('tradeChart').getContext('2d');
 
@@ -1744,33 +1769,7 @@ function createTradeChart() {
         }
     });
 
-    // Add keyboard controls for trade chart
-    window.tradeChartKeyListener = (e) => {
-        if (appState.currentMode !== 'trade' || !tradeChart) return;
-        switch (e.key) {
-            case '-': case '_':
-                e.preventDefault();
-                tradeChart.zoom(0.8);
-                callbackTradeZoom(tradeChart);
-                break;
-            case '+': case '=':
-                e.preventDefault();
-                tradeChart.zoom(1.2);
-                callbackTradeZoom(tradeChart);
-                break;
-            case 'ArrowLeft':
-                e.preventDefault();
-                tradeChart.pan({ x: 100 });
-                callbackTradePan(tradeChart);
-                break;
-            case 'ArrowRight':
-                e.preventDefault();
-                tradeChart.pan({ x: -100 });
-                callbackTradePan(tradeChart);
-                break;
-        }
-    };
-    document.addEventListener('keydown', window.tradeChartKeyListener);
+    document.addEventListener('keydown', callbackTradeKeyDown);
 }
 
 function updateTradeTimeUnit(chart) {
@@ -1800,12 +1799,9 @@ function updateTradeCategories(minDate, maxDate) {
 
     tradeData.forEach(record => {
         if (record.date < minDate || record.date > maxDate) return;
-
-        // Calculate net imports for each country (imports - exports)
-        totals[0] += (record.trade[0] - record.trade[4]) / 1000; // Austria: imports[0] - exports[4]
-        totals[1] += (record.trade[2] - record.trade[6]) / 1000; // France: imports[2] - exports[6]
-        totals[2] += (record.trade[1] - record.trade[5]) / 1000; // Germany: imports[1] - exports[5]
-        totals[3] += (record.trade[3] - record.trade[7]) / 1000; // Italy: imports[3] - exports[7]
+        for (let i = 0; i < 4; i++) {
+            totals[i] += (record.trade[i] - record.trade[i + 4]) / 1000; // imports @i, exports @i+4
+        }
         count++;
     });
 
@@ -1882,7 +1878,7 @@ function updateTradeChart(minDate, maxDate) {
             const netTrade = (record.trade[categoryIndex] - record.trade[categoryIndex + 4]) / 1000; // Convert MWh to GWh
             return {
                 x: record.date,
-                y: netTrade
+                y: Math.round(netTrade * 10) / 10
             };
         });
 
@@ -1897,7 +1893,7 @@ function updateTradeChart(minDate, maxDate) {
     });
 
     tradeChart.data.datasets = datasets;
-    tradeChart.options.plugins.title.text = `Energy trade (GWh ${TIME_UNIT_NAMES[currentUnit]})`;
+    tradeChart.options.plugins.title.text = `Energy trade (imports - exports, GWh ${TIME_UNIT_NAMES[currentUnit]})`;
 
     // Set zoom and pan limits to data range
     if (minDate && maxDate) {
