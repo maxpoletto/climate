@@ -608,8 +608,7 @@ body {
     outline: none;
 }
 
-/* Production view styles */
-#productionView {
+#productionMode {
     position: absolute;
     top: 40px;
     bottom: 0;
@@ -621,8 +620,7 @@ body {
     display: none;
 }
 
-/* Trade view styles */
-#tradeView {
+#tradeMode {
     position: absolute;
     top: 40px;
     bottom: 0;
@@ -738,7 +736,7 @@ body {
     display: block;
 }
 
-#aboutView {
+#aboutMode {
     position: absolute;
     top: 40px;
     bottom: 0;
