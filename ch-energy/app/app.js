@@ -268,7 +268,7 @@ class TimeSeriesChart {
         this.state = config.state;
         this.selectedCategories = config.selectedCategories;
 
-        this.freshKey = config.freshKey;
+        this.fresh = config.fresh;
         this.minRange = config.minRange || 7 * 24 * 60 * 60 * 1000; // one week minimum
 
         this.chartTitle = config.chartTitle;
@@ -286,8 +286,8 @@ class TimeSeriesChart {
         this.createChart();
         this.renderControls();
 
-        const min = Math.max(this.state.xmin, new Date('2015-01-01').getTime());
-        const max = Math.min(this.state.xmax, new Date().getTime());
+        const min = Math.max(appState[this.state].xmin, new Date('2015-01-01').getTime());
+        const max = Math.min(appState[this.state].xmax, new Date().getTime());
         this.chart.options.scales.x.min = min;
         this.chart.options.scales.x.max = max;
         this.chart.update();
@@ -410,7 +410,7 @@ class TimeSeriesChart {
         allCheckbox.type = 'checkbox';
         allCheckbox.className = 'category-checkbox';
         allCheckbox.id = this.categoryCheckboxElementId + '-all';
-        allCheckbox.checked = this.selectedCategories.length === this.categories.length;
+        allCheckbox.checked = appState[this.selectedCategories].length === this.categories.length;
         const allLabel = document.createElement('label');
         allLabel.htmlFor = this.categoryCheckboxElementId + '-all';
         allLabel.textContent = 'Select/Deselect All';
@@ -433,7 +433,7 @@ class TimeSeriesChart {
             checkbox.className = 'category-checkbox';
             checkbox.id = `${this.categoryCheckboxElementId}${index}`;
             checkbox.value = category;
-            checkbox.checked = this.selectedCategories.includes(category);
+            checkbox.checked = appState[this.selectedCategories].includes(category);
 
             const label = document.createElement('label');
             label.className = 'category-label';
@@ -473,7 +473,7 @@ class TimeSeriesChart {
                 return;
             }
             element.textContent = averages[index].toFixed(1);
-            if (this.selectedCategories.includes(category)) {
+            if (appState[this.selectedCategories].includes(category)) {
                 selectedTotal += averages[index];
             }
         });
@@ -527,7 +527,7 @@ class TimeSeriesChart {
         }
 
         document.getElementById(this.canvasId).focus();
-        if (fresh[this.freshKey]) { return; }
+        if (fresh[this.fresh]) { console.log('fresh', this.fresh, fresh[this.fresh]); return; }
         const chart = this.chart;
         let currentUnit = chart.options.scales.x.time.unit;
         const aggregatedData = aggregateByTimeUnit(this.data, currentUnit);
@@ -569,7 +569,7 @@ class TimeSeriesChart {
         chart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
         chart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
         chart.update();
-        fresh[this.freshKey] = true;
+        fresh[this.fresh] = true;
     }
 
     callbackCategoryChange(e) {
@@ -581,17 +581,17 @@ class TimeSeriesChart {
             document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]`).forEach(cb => {
                 if (cb.id !== allCheckbox.id) cb.checked = checked;
             });
-            this.selectedCategories = checked ? [...this.categories] : [];
+            appState[this.selectedCategories] = checked ? [...this.categories] : [];
         } else {
-            this.selectedCategories = Array
+            appState[this.selectedCategories] = Array
                 .from(document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]:not(#${this.categoryCheckboxElementId}-all):checked`))
                 .map(cb => cb.value);
             // Sync select-all checkbox
-            const allChecked = this.selectedCategories.length === this.categories.length;
+            const allChecked = appState[this.selectedCategories].length === this.categories.length;
             allCheckbox.checked = allChecked;
         }
 
-        fresh[this.freshKey] = false;
+        fresh[this.fresh] = false;
         this.updateChart();
         this.updateCategories();
         serializeStateToURL();
@@ -602,19 +602,19 @@ class TimeSeriesChart {
     }
 
     callbackZoom() {
-        fresh[this.freshKey] = false;
+        fresh[this.fresh] = false;
         this.updateTimeUnit();
         this.updateChart(this.chart.scales.x.min, this.chart.scales.x.max);
         this.updateCategories(this.chart.scales.x.min, this.chart.scales.x.max);
-        this.state.xmin = this.chart.scales.x.min;
-        this.state.xmax = this.chart.scales.x.max;
+        appState[this.state].xmin = this.chart.scales.x.min;
+        appState[this.state].xmax = this.chart.scales.x.max;
         serializeStateToURL();
     }
 
     callbackPan(chart) {
         this.updateCategories(chart.scales.x.min, chart.scales.x.max);
-        this.state.xmin = chart.scales.x.min;
-        this.state.xmax = chart.scales.x.max;
+        appState[this.state].xmin = chart.scales.x.min;
+        appState[this.state].xmax = chart.scales.x.max;
         serializeStateToURL();
     }
 
@@ -828,16 +828,14 @@ async function loadData() {
         // Import state (if any) from URL.
         deserializeStateFromURL();
 
+        // Initialize with all categories on first load (=== null)
         if (appState.selectedProductionCategories === null) {
-            // Initialize with all production categories on first load (=== null)
             appState.selectedProductionCategories = [...PRODUCTION_CATEGORIES];
         }
         if (appState.selectedFacilitiesCategories === null) {
-            // Initialize with all facilities categories on first load (=== null)
             appState.selectedFacilitiesCategories = [...facilities.categories];
         }
         if (appState.selectedTradeCategories === null) {
-            // Initialize with all trade categories on first load (=== null)
             appState.selectedTradeCategories = [...TRADE_CATEGORIES];
         }
 
@@ -870,7 +868,7 @@ async function loadData() {
 }
 
 function initializeUI() {
-    function _renderPowerSlider() {
+    function renderPowerSlider() {
         const powerRangeSlider = document.getElementById('powerRangeSlider');
         noUiSlider.create(powerRangeSlider, {
             start: [
@@ -885,14 +883,14 @@ function initializeUI() {
         });
     }
 
-    function _renderSearchInput() {
+    function renderSearchInput() {
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
             searchInput.value = appState.searchTokens.join(' ');
         }
     }
 
-    function _renderFacilitiesCheckboxes() {
+    function renderFacilitiesCheckboxes() {
         const container = document.getElementById('facilitiesCategoryTableBody');
         container.innerHTML = '';
 
@@ -960,9 +958,9 @@ function initializeUI() {
         });
     }
 
-    _renderPowerSlider();
-    _renderSearchInput();
-    _renderFacilitiesCheckboxes();
+    renderPowerSlider();
+    renderSearchInput();
+    renderFacilitiesCheckboxes();
     setupEventHandlers();
     sortFacilities(appState.currentSort.column, appState.currentSort.sortAscending);
     filterFacilities();
@@ -972,10 +970,10 @@ function initializeUI() {
         categories: PRODUCTION_CATEGORIES,
         colors: PRODUCTION_CATEGORY_COLORS,
         data: productionData,
-        state: appState.productionChart,
-        selectedCategories: appState.selectedProductionCategories,
+        state: "productionChart",
+        selectedCategories: "selectedProductionCategories",
 
-        freshKey: 'production',
+        fresh: 'production',
         chartTitle: 'Energy production',
         yAxisTitle: 'Production (GWh)',
         beginAtZero: true,
@@ -995,10 +993,10 @@ function initializeUI() {
         categories: TRADE_CATEGORIES,
         colors: TRADE_CATEGORY_COLORS,
         data: tradeData,
-        state: appState.tradeChart,
-        selectedCategories: appState.selectedTradeCategories,
+        state: "tradeChart",
+        selectedCategories: "selectedTradeCategories",
 
-        freshKey: 'trade',
+        fresh: 'trade',
 
         chartTitle: 'Energy trade (imports - exports)',
         yAxisTitle: 'Net (imports - exports) (GWh)',
