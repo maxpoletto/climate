@@ -106,9 +106,9 @@
             </span>
             <button id="resetProductionZoom" class="reset-zoom-btn">Reset Zoom</button>
         </div>
-        <div id="productionContainer">
+        <div id="productionContainer" class="time-series">
             <div id="productionChartContainer">
-                <canvas id="productionChart"></canvas>
+                <canvas id="productionChart" class="chart-canvas"></canvas>
             </div>
         </div>
     </div>
@@ -122,7 +122,7 @@
         </div>
         <div id="tradeContainer">
             <div id="tradeChartContainer">
-                <canvas id="tradeChart"></canvas>
+                <canvas id="tradeChart" class="chart-canvas"></canvas>
             </div>
         </div>
     </div>
@@ -195,7 +195,7 @@
     </div>
     <div id="controls">
         <div class="control-section facilities-controls">
-            <button id="viewToggle" class="view-toggle-btn">📊 Table View</button>
+            <button id="viewToggle">📊 Table View</button>
         </div>
         <div class="control-section facilities-controls">
             <h3>Energy Sources</h3>

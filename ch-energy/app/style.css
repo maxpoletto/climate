@@ -9,16 +9,66 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-#map {
-    position: absolute;
-    top: 40px;
-    bottom: 0;
+/*******************
+* Loading
+*******************/
+
+/* Loading overlay */
+#loadingOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-.maplibregl-ctrl-group {
-    display: none;
+.loading-content {
+    text-align: center;
+    padding: 30px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e0e0e0;
+    border-top: 4px solid #2196F3;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+#retryButton {
+    padding: 10px 20px;
+    background: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+/*******************
+* Controls
+*******************/
 
 #controls {
     position: absolute;
@@ -46,6 +96,8 @@ body {
     color: #333;
 }
 
+/* Category checkboxes + counters */
+
 .category-table {
     width: 100%;
     border-collapse: collapse;
@@ -61,19 +113,16 @@ body {
     font-size: 11px;
 }
 
-.category-table th:nth-child(2),
-.category-table th:nth-child(3) {
+.category-table th:nth-child(2), .category-table th:nth-child(3) {
     text-align: right;
 }
 
-.category-table th:nth-child(2),
-.category-table td:nth-child(2) {
+.category-table th:nth-child(2), .category-table td:nth-child(2) {
     width: 60px;
     min-width: 60px;
 }
 
-.category-table th:nth-child(3),
-.category-table td:nth-child(3) {
+.category-table th:nth-child(3), .category-table td:nth-child(3) {
     width: 70px;
     min-width: 70px;
 }
@@ -131,6 +180,8 @@ body {
     font-size: 11px;
 }
 
+/* Power range slider */
+
 .power-control {
     display: flex;
     flex-direction: column;
@@ -146,9 +197,74 @@ body {
     color: #666;
 }
 
-#powerFilter {
-    width: 100%;
+#powerRangeSlider {
+    margin: 15px 0;
 }
+
+.noUi-target {
+    background: #e0e0e0;
+    border-radius: 8px;
+    border: none;
+    height: 8px;
+}
+
+.noUi-connect {
+    background: #2196F3;
+}
+
+.noUi-handle {
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #2196F3;
+    cursor: grab;
+    outline: none;
+    top: -8px !important;
+}
+
+.noUi-handle:active {
+    cursor: grabbing;
+}
+
+.noUi-handle:before, .noUi-handle:after {
+    display: none;
+}
+
+/* Search widget */
+
+#searchInput {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    box-sizing: border-box;
+    transition: border-color 0.3s;
+}
+
+#searchInput:focus {
+    border-color: #2196F3;
+    outline: none;
+}
+
+/* Facility selectors */
+
+.energy-source-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.table-color-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    flex-shrink: 0;
+}
+
+/* Annotations */
 
 .annotations {
     font-size: 11px;
@@ -202,60 +318,8 @@ body {
     border-top-color: #333;
 }
 
-/* Loading overlay */
-#loadingOverlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.9);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
+/* Mobile responsiveness for controls*/
 
-.loading-content {
-    text-align: center;
-    padding: 30px;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-}
-
-.loading-spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid #e0e0e0;
-    border-top: 4px solid #2196F3;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 15px;
-}
-
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-
-    100% {
-        transform: rotate(360deg);
-    }
-}
-
-#retryButton {
-    padding: 10px 20px;
-    background: #2196F3;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
-}
-
-/* Mobile responsiveness */
 @media (max-width: 480px) {
     #controls {
         width: 260px;
@@ -289,42 +353,10 @@ body {
     }
 }
 
-#powerRangeSlider {
-    margin: 15px 0;
-}
+/*******************
+* Tab navigation
+*******************/
 
-.noUi-target {
-    background: #e0e0e0;
-    border-radius: 8px;
-    border: none;
-    height: 8px;
-}
-
-.noUi-connect {
-    background: #2196F3;
-}
-
-.noUi-handle {
-    width: 24px !important;
-    height: 24px !important;
-    border-radius: 50%;
-    background: #fff;
-    border: 2px solid #2196F3;
-    cursor: grab;
-    outline: none;
-    top: -8px !important;
-}
-
-.noUi-handle:active {
-    cursor: grabbing;
-}
-
-.noUi-handle:before,
-.noUi-handle:after {
-    display: none;
-}
-
-/* Tab navigation styles */
 .tab-navigation {
     position: fixed;
     top: 0;
@@ -371,6 +403,61 @@ body {
 .tab-button.active:hover {
     background: white;
 }
+
+/*******************
+* Top-level modes
+*******************/
+
+.mode {
+    position: absolute;
+    top: 50px;
+    bottom: 0;
+    left: 0;
+    right: 320px; /* Leave space for controls panel */
+}
+
+#productionMode {
+    background: white;
+    overflow: hidden;
+    display: none;
+}
+
+#productionContainer {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    margin-top: 40px;
+}
+
+#tradeMode {
+    background: white;
+    overflow: hidden;
+    display: none;
+}
+
+#tradeContainer {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    margin-top: 40px;
+}
+
+/* Map */
+
+#map {
+    position: absolute;
+    top: 40px;
+    bottom: 0;
+    width: 100%;
+}
+
+.maplibregl-ctrl-group {
+    display: none;
+}
+
+/*******************
+* Table view
+*******************/
 
 #tableView {
     position: absolute;
@@ -430,7 +517,6 @@ body {
 #currentPageNumber {
     cursor: pointer;
     text-decoration: underline;
-
     color: #2196F3;
 }
 
@@ -462,36 +548,30 @@ body {
     table-layout: fixed;
 }
 
-#facilitiesTable th:nth-child(1) {
+#facilitiesTable th:nth-child(1) { /* Energy Type */
     width: 25%;
 }
 
-/* Energy Source */
-#facilitiesTable th:nth-child(2) {
+#facilitiesTable th:nth-child(2) { /* Power */
     width: 15%;
 }
 
-/* Power (kW) */
-#facilitiesTable th:nth-child(3) {
+#facilitiesTable th:nth-child(3) { /* Town */
     width: 25%;
 }
 
-/* Municipality */
-#facilitiesTable th:nth-child(4) {
+#facilitiesTable th:nth-child(4) { /* Canton */
     width: 12%;
 }
 
-/* Canton */
-#facilitiesTable th:nth-child(5) {
+#facilitiesTable th:nth-child(5) { /* Date */
     width: 15%;
 }
 
-/* Started */
-#facilitiesTable th:nth-child(6) {
+#facilitiesTable th:nth-child(6) { /* GPS */
     width: 8%;
 }
 
-/* GPS */
 #facilitiesTable th {
     background: #f7f7f7;
     padding: 12px 8px;
@@ -548,20 +628,6 @@ body {
     opacity: 1;
 }
 
-.energy-source-cell {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.table-color-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 1px solid #ccc;
-    flex-shrink: 0;
-}
-
 .gps-indicator {
     text-align: center;
 }
@@ -576,7 +642,7 @@ body {
     font-weight: bold;
 }
 
-.view-toggle-btn {
+#viewToggle {
     width: 100%;
     padding: 10px;
     background: #2196F3;
@@ -589,67 +655,18 @@ body {
     transition: background-color 0.3s;
 }
 
-.view-toggle-btn:hover {
+#viewToggle:hover {
     background: #1976D2;
 }
 
-#searchInput {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 13px;
-    box-sizing: border-box;
-    transition: border-color 0.3s;
-}
-
-#searchInput:focus {
-    border-color: #2196F3;
-    outline: none;
-}
-
-#productionMode {
-    position: absolute;
-    top: 40px;
-    bottom: 0;
-    left: 0;
-    right: 320px;
-    /* Leave space for controls panel */
-    background: white;
-    overflow: hidden;
-    display: none;
-}
-
-#tradeMode {
-    position: absolute;
-    top: 40px;
-    bottom: 0;
-    left: 0;
-    right: 320px;
-    /* Leave space for controls panel */
-    background: white;
-    overflow: hidden;
-    display: none;
-}
-
-#productionContainer {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    margin-top: 40px;
-}
-
-#tradeContainer {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    margin-top: 40px;
-}
+/*******************
+* Time series charts
+*******************/
 
 .chart-controls {
     position: fixed;
     top: 55px;
-    left: 65px;
+    left: 20px;
     right: 320px;
     /* Leave space for the controls panel */
     background: white;
@@ -691,7 +708,7 @@ body {
     overflow: hidden;
 }
 
-#productionChart {
+.chart-canvas {
     width: 100% !important;
     height: 100% !important;
     user-select: none;
@@ -700,8 +717,7 @@ body {
     -ms-user-select: none;
 }
 
-#productionChart:focus,
-#tradeChart:focus {
+.chart-canvas:focus {
     outline: none;
 }
 
@@ -709,15 +725,6 @@ body {
     flex: 1;
     padding: 20px;
     overflow: hidden;
-}
-
-#tradeChart {
-    width: 100% !important;
-    height: 100% !important;
-    user-select: none;
-    -moz-user-select: none;
-    -webkit-user-select: none;
-    -ms-user-select: none;
 }
 
 .production-controls {
@@ -736,11 +743,11 @@ body {
     display: block;
 }
 
+/*******************
+* About mode
+*******************/
+
 #aboutMode {
-    position: absolute;
-    top: 40px;
-    bottom: 0;
-    left: 0;
     right: 0;
     background: white;
     overflow: auto;
