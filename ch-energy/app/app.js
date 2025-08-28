@@ -341,12 +341,12 @@ class TimeSeriesChart {
                                 enabled: false
                             },
                             mode: 'x',
-                            onZoomComplete: ({chart}) => this.callbackZoom(chart)
+                            onZoomComplete: (_) => this.callbackZoom()
                         },
                         pan: {
                             enabled: true,
                             mode: 'x',
-                            onPanComplete: ({chart}) => this.callbackPan(chart)
+                            onPanComplete: (_) => this.callbackPan()
                         },
                         limits: {
                             x: {
@@ -610,10 +610,10 @@ class TimeSeriesChart {
         serializeStateToURL();
     }
 
-    callbackPan(chart) {
-        this.updateCategories(chart.scales.x.min, chart.scales.x.max);
-        appState[this.state].xmin = chart.scales.x.min;
-        appState[this.state].xmax = chart.scales.x.max;
+    callbackPan() {
+        this.updateCategories(this.chart.scales.x.min, this.chart.scales.x.max);
+        appState[this.state].xmin = this.chart.scales.x.min;
+        appState[this.state].xmax = this.chart.scales.x.max;
         serializeStateToURL();
     }
 
