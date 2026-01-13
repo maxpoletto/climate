@@ -1559,7 +1559,7 @@ function productionCategoryAggregator(data, minDate, maxDate) {
 
     for (const record of data) {
         if (record.date < minDate || record.date > maxDate) continue;
-        for (let i = 0; i < 4; i++) {
+        for (let i = 0; i < aves.length; i++) {
             aves[i] += record.val[i];
         }
         count++;
@@ -1576,8 +1576,9 @@ function tradeCategoryAggregator(data, minDate, maxDate) {
 
     for (const record of data) {
         if (record.date < minDate || record.date > maxDate) continue;
-        for (let i = 0; i < 4; i++) {
-            aves[i] += (record.val[i] - record.val[i + 4]) / 1000; // imports @i, exports @i+4
+        for (let i = 0; i < aves.length; i++) {
+            // imports @i, exports @i+TRADE_CATEGORIES.length. Convert MWh to GWh.
+            aves[i] += (record.val[i] - record.val[i + TRADE_CATEGORIES.length]) / 1000;
         }
         count++;
     }
@@ -1601,7 +1602,8 @@ function productionValueProcessor(data, categoryIndex) {
 function tradeValueProcessor(data, categoryIndex) {
     const v = new Array(data.length);
     for (let i = 0; i < data.length; i++) {
-        const netTrade = (data[i].val[categoryIndex] - data[i].val[categoryIndex + 4]) / 1000; // Convert MWh to GWh
+        // imports @categoryIndex, exports @categoryIndex + TRADE_CATEGORIES.length. Convert MWh to GWh.
+        const netTrade = (data[i].val[categoryIndex] - data[i].val[categoryIndex + TRADE_CATEGORIES.length]) / 1000;
         v[i] = {
             x: data[i].date,
             y: Math.round(netTrade * 10) / 10
