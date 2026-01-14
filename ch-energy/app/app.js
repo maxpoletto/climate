@@ -292,7 +292,7 @@ class TimeSeriesChart {
         this.chart.options.scales.x.max = max;
         this.chart.update();
         this.updateTimeUnit();
-        this.updateCategories(min, max);
+        this.updateCategories();
 
         const canvas = document.getElementById(this.canvasId);
         canvas.tabIndex = 0; // Make canvas focusable
@@ -463,7 +463,8 @@ class TimeSeriesChart {
         });
     }
 
-    updateCategories(minDate, maxDate) {
+    updateCategories() {
+        let minDate = this.chart.scales.x.min, maxDate = this.chart.scales.x.max;
         const averages = this.categoryAggregator(this.data, minDate, maxDate);
         let selectedTotal = 0;
         this.categories.forEach((category, index) => {
@@ -604,14 +605,14 @@ class TimeSeriesChart {
         fresh[this.fresh] = false;
         this.updateTimeUnit();
         this.updateChart(this.chart.scales.x.min, this.chart.scales.x.max);
-        this.updateCategories(this.chart.scales.x.min, this.chart.scales.x.max);
+        this.updateCategories();
         appState[this.state].xmin = this.chart.scales.x.min;
         appState[this.state].xmax = this.chart.scales.x.max;
         serializeStateToURL();
     }
 
     callbackPan() {
-        this.updateCategories(this.chart.scales.x.min, this.chart.scales.x.max);
+        this.updateCategories();
         appState[this.state].xmin = this.chart.scales.x.min;
         appState[this.state].xmax = this.chart.scales.x.max;
         serializeStateToURL();
