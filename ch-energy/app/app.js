@@ -286,12 +286,17 @@ class TimeSeriesChart {
         this.createChart();
         this.renderControls();
 
-        const min = Math.max(appState[this.state].xmin, new Date('2015-01-01').getTime());
+        const min = Math.max(appState[this.state].xmin, new Date(config.startDate).getTime());
         const max = Math.min(appState[this.state].xmax, new Date().getTime());
-        this.chart.options.scales.x.min = min;
+        appState[this.state].xmin = min;
+        appState[this.state].xmax = max;
+        this.chart.options.scales.x.min = min
         this.chart.options.scales.x.max = max;
-        this.chart.update();
+        this.chart.scales.x.min = min;
+        this.chart.scales.x.max = max;
+
         this.updateTimeUnit();
+        this.updateChart();
         this.updateCategories();
 
         const canvas = document.getElementById(this.canvasId);
@@ -482,7 +487,7 @@ class TimeSeriesChart {
         totalElement.textContent = selectedTotal.toFixed(1);
     }
 
-    updateChart(minDate, maxDate) {
+    updateChart() {
         function aggregateByTimeUnit(data, unit) {
             const aggregated = {};
 
@@ -553,20 +558,6 @@ class TimeSeriesChart {
 
         chart.data.datasets = datasets;
         chart.options.plugins.title.text = this.chartTitle + ' (GWh ' + TIME_UNIT_NAMES[currentUnit] + ')';
-
-        // Set zoom and pan limits to data range
-        if (minDate && maxDate) {
-            chart.scales.x.min = minDate;
-            chart.scales.x.max = maxDate;
-        } else if (appState.productionChart.xmin && appState.productionChart.xmax) {
-            // Use saved bounds from state
-            chart.scales.x.min = appState.productionChart.xmin;
-            chart.scales.x.max = appState.productionChart.xmax;
-        } else {
-            // Default to full data range
-            chart.scales.x.min = aggregatedData[0].date;
-            chart.scales.x.max = aggregatedData[aggregatedData.length - 1].date;
-        }
         chart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
         chart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
         chart.update();
@@ -604,7 +595,7 @@ class TimeSeriesChart {
     callbackZoom() {
         fresh[this.fresh] = false;
         this.updateTimeUnit();
-        this.updateChart(this.chart.scales.x.min, this.chart.scales.x.max);
+        this.updateChart();
         this.updateCategories();
         appState[this.state].xmin = this.chart.scales.x.min;
         appState[this.state].xmax = this.chart.scales.x.max;
