@@ -291,7 +291,7 @@ class TimeSeriesChart {
         this.chart.options.scales.x.min = min;
         this.chart.options.scales.x.max = max;
         this.chart.update();
-        this.updateTimeUnit(this.chart);
+        this.updateTimeUnit();
         this.updateCategories(min, max);
 
         const canvas = document.getElementById(this.canvasId);
