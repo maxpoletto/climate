@@ -41,10 +41,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+#pylint: disable=line-too-long
 FACILITIES_URL = "https://data.geo.admin.ch/ch.bfe.elektrizitaetsproduktionsanlagen/csv/2056/ch.bfe.elektrizitaetsproduktionsanlagen.zip"  # noqa: E501
 PRODUCTION_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv"  # noqa
 TRADE_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/107/ogd107_strom_import_export.csv"  # noqa
 DOWNLOAD_PATH = "/tmp/ch-energy/downloads"
+#pylint: enable=line-too-long
 
 # Position of energy source in output array (input file is in German)
 PRODUCTION_SOURCE_INDEX = {
@@ -100,7 +102,8 @@ class Geocoder:
         self.num_requests = 0
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Swiss Energy Explorer (https://maxp.net/ch-energy, contact: maxp@maxp.net)'
+            'User-Agent': ('Swiss Energy Explorer' +
+                           ' (https://maxp.net/ch-energy, contact: maxp@maxp.net)')
         })
 
     def load(self):
@@ -136,7 +139,8 @@ class Geocoder:
         address_parts is a dict with keys 'Address', 'PostCode', 'Municipality'.
         Returns (lat, lon) tuple or (None, None) if not found.
         """
-        cache_key ='|'.join([ str(address_parts[f]).strip().replace('\t', ' ').replace('|', ' ') for f in ['Address', 'PostCode', 'Municipality']])
+        cache_key = ('|'.join([ str(address_parts[f]).strip().replace('\t', ' ').replace('|', ' ')
+            for f in ['Address', 'PostCode', 'Municipality']]))
         if cache_key in self.cache:
             return self.cache[cache_key]
 
@@ -225,7 +229,7 @@ def download_csv(url: str, data_type: str) -> str:
 
     except requests.RequestException as e:
         logger.error("Download failed: %s", e)
-        raise(e)
+        raise e
 
 def load_catalogue_translations(extract_dir : str) -> dict[str, str]:
     """Load translation dictionaries from 'catalogue' CSV files."""
@@ -279,7 +283,7 @@ def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
                 keys = row + ['lat', 'lon']
                 continue
             if keys is None:
-                raise Exception("No keys found in facilities data")
+                raise ValueError("No keys found in facilities data")
 
             try:
                 values = []
@@ -306,7 +310,8 @@ def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
                         if field in fields and fields[field]:
                             address_parts[field] = fields[field]
 
-                    if address_parts and address_parts['Address'] and address_parts['PostCode'] and address_parts['Municipality']:
+                    if (address_parts and address_parts['Address']
+                        and address_parts['PostCode'] and address_parts['Municipality']):
                         lat, lon = geocoder.geocode(address_parts)
                         if lat is not None and lon is not None:
                             geocoded_facilities += 1
@@ -319,7 +324,7 @@ def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
                 all_fields = dict(zip(keys, values))
                 facility = [ all_fields[field] for field in REQUIRED_FIELDS ]
                 facilities.append(facility)
-            except Exception as e:
+            except ValueError as e:
                 logger.warning("Error processing facility row %d: %s", i, e)
                 continue
 
@@ -327,7 +332,8 @@ def import_facilities(csv_path : str, geocoder : Geocoder) -> list[dict]:
     geocoder.save()
 
     logger.info("Processed %d facilities, %d with GPS coordinates (%d from data, %d geocoded)",
-                len(facilities), facilities_with_coords, facilities_with_coords - geocoded_facilities, geocoded_facilities)
+                len(facilities), facilities_with_coords,
+                facilities_with_coords - geocoded_facilities, geocoded_facilities)
     return facilities
 
 def import_production(csv_content : str) -> list[dict]:
@@ -408,7 +414,8 @@ def import_trade(csv_content: str) -> list[dict]:
             'val': day_data['val']  # Keep as daily totals (MWh per day)
         })
 
-    logger.info("Processed %s hourly data points into %s daily records", processed_rows, len(result))
+    logger.info("Processed %d hourly data points into %d daily records",
+        processed_rows, len(result))
     return result
 
 def save_compressed_json(data : list[dict], output_file : str):
@@ -440,7 +447,8 @@ def save_compressed_json(data : list[dict], output_file : str):
             os.unlink(temp_path)
         raise e
 
-def print_summary(facilities_data : list[dict], production_data : list[dict], trade_data : list[dict] = None):
+def print_summary(facilities_data : list[dict], production_data : list[dict],
+                  trade_data : list[dict] = None):
     """Print summary statistics."""
     print("\nData Import Summary:")
 
@@ -489,13 +497,21 @@ def print_summary(facilities_data : list[dict], production_data : list[dict], tr
         print(f"  Total days: {len(trade_data):,}")
 
 def main():
-    parser = argparse.ArgumentParser(description='Import Swiss energy facilities and production data')
-    parser.add_argument('--dest_root', default='.', help='Root directory for output files')
-    parser.add_argument('--geocode-cache', default='geocode-cache.txt', help='Geocode cache file')
-    parser.add_argument('--summary', action='store_true', help='Show data summary after processing')
-    parser.add_argument('--facilities-only', action='store_true', help='Only process facilities data')
-    parser.add_argument('--production-only', action='store_true', help='Only process production data')
-    parser.add_argument('--trade-only', action='store_true', help='Only process trade data')
+    """Main function."""
+    parser = argparse.ArgumentParser(
+        description='Import Swiss energy facilities and production data')
+    parser.add_argument('--dest_root', default='.',
+        help='Root directory for output files')
+    parser.add_argument('--geocode-cache', default='geocode-cache.txt',
+        help='Geocode cache file')
+    parser.add_argument('--summary', action='store_true',
+        help='Show data summary after processing')
+    parser.add_argument('--facilities-only', action='store_true',
+        help='Only process facilities data')
+    parser.add_argument('--production-only', action='store_true',
+        help='Only process production data')
+    parser.add_argument('--trade-only', action='store_true',
+        help='Only process trade data')
     args = parser.parse_args()
 
     ensure_directories(args.dest_root)
@@ -543,7 +559,7 @@ def main():
     # Write last update timestamp
     last_update_file = os.path.join(args.dest_root, 'data', 'last-update.txt')
     os.makedirs(os.path.dirname(last_update_file), exist_ok=True)
-    with open(last_update_file, 'w') as f:
+    with open(last_update_file, 'w', encoding='utf-8') as f:
         f.write(datetime.now().strftime('%Y-%m-%d'))
     logger.info("Wrote last update timestamp to %s", last_update_file)
 
