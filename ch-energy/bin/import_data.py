@@ -42,9 +42,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 #pylint: disable=line-too-long
-FACILITIES_URL = "https://data.geo.admin.ch/ch.bfe.elektrizitaetsproduktionsanlagen/csv/2056/ch.bfe.elektrizitaetsproduktionsanlagen.zip"  # noqa: E501
-PRODUCTION_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv"  # noqa
-TRADE_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/107/ogd107_strom_import_export.csv"  # noqa
+FACILITIES_URL = "https://data.geo.admin.ch/ch.bfe.elektrizitaetsproduktionsanlagen/csv/2056/ch.bfe.elektrizitaetsproduktionsanlagen.zip"
+PRODUCTION_URL = "https://www.uvek-gis.admin.ch/BFE/ogd/104/ogd104_stromproduktion_swissgrid.csv"
+TRADE_URL = "https://www.bfe-ogd.ch/ogd107_strom_import_export.csv"
 DOWNLOAD_PATH = "/tmp/ch-energy/downloads"
 #pylint: enable=line-too-long
 
@@ -69,14 +69,14 @@ PRODUCTION_SOURCE_NAMES = [
 
 # Position of trade flows in output array
 TRADE_FLOW_INDEX = {
-    'AT_CH_MWh': 0,      # Austria to Switzerland
-    'DE_CH_MWh': 1,      # Germany to Switzerland
-    'FR_CH_MWh': 2,      # France to Switzerland
-    'IT_CH_MWh': 3,      # Italy to Switzerland
-    'CH_AT_MWh': 4,      # Switzerland to Austria
-    'CH_DE_MWh': 5,      # Switzerland to Germany
-    'CH_FR_MWh': 6,      # Switzerland to France
-    'CH_IT_MWh': 7       # Switzerland to Italy
+    'AT_CH_GWh': 0,      # Austria to Switzerland
+    'DE_CH_GWh': 1,      # Germany to Switzerland
+    'FR_CH_GWh': 2,      # France to Switzerland
+    'IT_CH_GWh': 3,      # Italy to Switzerland
+    'CH_AT_GWh': 4,      # Switzerland to Austria
+    'CH_DE_GWh': 5,      # Switzerland to Germany
+    'CH_FR_GWh': 6,      # Switzerland to France
+    'CH_IT_GWh': 7       # Switzerland to Italy
 }
 
 # Fields to keep from facilities data
@@ -383,8 +383,8 @@ def import_trade(csv_content: str) -> list[dict]:
 
     for row in csv_reader:
         try:
-            datetime_str = row['Datetime']
-            date_key = datetime.fromisoformat(datetime_str).date().isoformat()
+            date_str = row['Date']
+            date_key = datetime.fromisoformat(date_str).date().isoformat()
 
             trade_flows = [0.0] * len(TRADE_FLOW_INDEX)
             for field, index in TRADE_FLOW_INDEX.items():
@@ -414,8 +414,7 @@ def import_trade(csv_content: str) -> list[dict]:
             'val': day_data['val']  # Keep as daily totals (MWh per day)
         })
 
-    logger.info("Processed %d hourly data points into %d daily records",
-        processed_rows, len(result))
+    logger.info("Processed %d data points into %d daily records", processed_rows, len(result))
     return result
 
 def save_compressed_json(data : list[dict], output_file : str):
