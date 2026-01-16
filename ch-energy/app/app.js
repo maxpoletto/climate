@@ -283,6 +283,10 @@ class TimeSeriesChart {
         this.resetZoomElementId = config.resetZoomElementId;
         this.displayValueProcessor = config.displayValueProcessor;
 
+        const dates = this.data.map(d => d.date instanceof Date ? d.date.getTime() : new Date(d.date).getTime());
+        this.dataMin = Math.min(...dates);
+        this.dataMax = Math.max(...dates);
+
         this.createChart();
         this.renderControls();
 
@@ -290,7 +294,7 @@ class TimeSeriesChart {
         const max = Math.min(appState[this.state].xmax, new Date().getTime());
         appState[this.state].xmin = min;
         appState[this.state].xmax = max;
-        this.chart.options.scales.x.min = min
+        this.chart.options.scales.x.min = min;
         this.chart.options.scales.x.max = max;
         this.chart.scales.x.min = min;
         this.chart.scales.x.max = max;
@@ -558,8 +562,6 @@ class TimeSeriesChart {
 
         chart.data.datasets = datasets;
         chart.options.plugins.title.text = this.chartTitle + ' (GWh ' + TIME_UNIT_NAMES[currentUnit] + ')';
-        chart.options.plugins.zoom.limits.x.min = aggregatedData[0].date;
-        chart.options.plugins.zoom.limits.x.max = aggregatedData[aggregatedData.length - 1].date;
         chart.update();
         fresh[this.fresh] = true;
     }
@@ -589,7 +591,30 @@ class TimeSeriesChart {
     }
 
     callbackResetZoom() {
+        const min = this.dataMin;
+        const max = this.dataMax;
+
+        appState[this.state].xmin = min;
+        appState[this.state].xmax = max;
+        this.chart.options.scales.x.min = min;
+        this.chart.options.scales.x.max = max;
+
+        if (this.chart.$zoom && this.chart.$zoom._originalOptions) {
+            // Crazy Claude thing to reset zoom limits. Not documented in the Chart.js docs.
+            if (!this.chart.$zoom._originalOptions.x) {
+                this.chart.$zoom._originalOptions.x = {};
+            }
+            this.chart.$zoom._originalOptions.x.min = min;
+            this.chart.$zoom._originalOptions.x.max = max;
+        }
+
+        fresh[this.fresh] = false; // Force update
+        this.updateTimeUnit();
+        this.updateChart();
+        this.updateCategories();
+
         this.chart.resetZoom();
+        serializeStateToURL();
     }
 
     callbackZoom() {
