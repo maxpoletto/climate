@@ -586,19 +586,10 @@ class TimeSeriesChart {
     }
 
     callbackResetZoom() {
-        const min = this.dataMin;
-        const max = this.dataMax;
-
-        appState[this.name].xmin = min;
-        appState[this.name].xmax = max;
-        this.chart.options.scales.x.min = min;
-        this.chart.options.scales.x.max = max;
-        fresh[this.name] = false;
-        this.updateTimeUnit();
-        this.updateChart();
-        this.updateCategories();
-        this.chart.resetZoom();
-        serializeStateToURL();
+        this.chart.options.scales.x.min = this.dataMin;
+        this.chart.options.scales.x.max = this.dataMax;
+        this.chart.update();
+        this.chart.resetZoom(); // Will trigger callbackZoom()
     }
 
     callbackZoom() {
