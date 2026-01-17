@@ -96,8 +96,8 @@ let isInitializing = true;       // Flag to prevent nouiSlider callbacks from be
 let fresh = {
     table: false,
     map: false,
-    production: false,
-    trade: false
+    productionChart: false,
+    tradeChart: false
 };
 
 let facilities = {
@@ -143,15 +143,13 @@ const appState = {
         zoom: 8
     },
 
-    // Production chart state
+    // Chart defaults, but overwritten by data and by URL state
     productionChart: {
         xmin: new Date('2015-01-01').getTime(),
         xmax: Infinity
     },
-
-    // Trade chart state
     tradeChart: {
-        xmin: new Date('2017-01-01').getTime(), // Trade data starts from 2017
+        xmin: new Date('2017-01-01').getTime(),
         xmax: Infinity
     }
 };
@@ -260,15 +258,13 @@ function deserializeStateFromURL() {
 
 class TimeSeriesChart {
     constructor(config) {
-        this.canvasId = config.canvasId;
+        this.name = config.name;
         this.categories = config.categories;
         this.colors = config.colors;
         this.data = config.data;
         this.chartType = config.chartType || 'bar';
-        this.state = config.state;
         this.selectedCategories = config.selectedCategories;
 
-        this.fresh = config.fresh;
         this.minRange = config.minRange || 7 * 24 * 60 * 60 * 1000; // one week minimum
 
         this.chartTitle = config.chartTitle;
@@ -290,10 +286,10 @@ class TimeSeriesChart {
         this.createChart();
         this.renderControls();
 
-        const min = Math.max(appState[this.state].xmin, this.dataMin);
-        const max = Math.min(appState[this.state].xmax, this.dataMax);
-        appState[this.state].xmin = min;
-        appState[this.state].xmax = max;
+        const min = Math.max(appState[this.name].xmin, this.dataMin);
+        const max = Math.min(appState[this.name].xmax, this.dataMax);
+        appState[this.name].xmin = min;
+        appState[this.name].xmax = max;
         this.chart.options.scales.x.min = min;
         this.chart.options.scales.x.max = max;
         this.chart.scales.x.min = min;
@@ -303,7 +299,7 @@ class TimeSeriesChart {
         this.updateChart();
         this.updateCategories();
 
-        const canvas = document.getElementById(this.canvasId);
+        const canvas = document.getElementById(this.name);
         canvas.tabIndex = 0; // Make canvas focusable
         canvas.addEventListener('keydown', this.callbackKeyDown.bind(this));
         document.getElementById(this.resetZoomElementId).addEventListener('click', this.callbackResetZoom.bind(this));
@@ -311,7 +307,7 @@ class TimeSeriesChart {
     }
 
     createChart() {
-        const ctx = document.getElementById(this.canvasId).getContext('2d');
+        const ctx = document.getElementById(this.name).getContext('2d');
         const config = {
             type: this.chartType,
             data: { datasets: [] },
@@ -536,14 +532,13 @@ class TimeSeriesChart {
             }).sort((a, b) => a.date - b.date);
         }
 
-        document.getElementById(this.canvasId).focus();
-        if (fresh[this.fresh]) { return; }
+        document.getElementById(this.name).focus();
+        if (fresh[this.name]) { return; }
         const chart = this.chart;
         let currentUnit = chart.options.scales.x.time.unit;
         const aggregatedData = aggregateByTimeUnit(this.data, currentUnit);
 
         const datasets = [];
-
         [...appState[this.selectedCategories]].reverse().forEach((category, _) => {
             const categoryIndex = this.categories.indexOf(category);
             if (categoryIndex === -1) return;
@@ -563,7 +558,7 @@ class TimeSeriesChart {
         chart.data.datasets = datasets;
         chart.options.plugins.title.text = this.chartTitle + ' (GWh ' + TIME_UNIT_NAMES[currentUnit] + ')';
         chart.update();
-        fresh[this.fresh] = true;
+        fresh[this.name] = true;
     }
 
     callbackCategoryChange(e) {
@@ -584,7 +579,7 @@ class TimeSeriesChart {
             allCheckbox.checked = allChecked;
         }
 
-        fresh[this.fresh] = false;
+        fresh[this.name] = false;
         this.updateChart();
         this.updateCategories();
         serializeStateToURL();
@@ -594,11 +589,11 @@ class TimeSeriesChart {
         const min = this.dataMin;
         const max = this.dataMax;
 
-        appState[this.state].xmin = min;
-        appState[this.state].xmax = max;
+        appState[this.name].xmin = min;
+        appState[this.name].xmax = max;
         this.chart.options.scales.x.min = min;
         this.chart.options.scales.x.max = max;
-        fresh[this.fresh] = false;
+        fresh[this.name] = false;
         this.updateTimeUnit();
         this.updateChart();
         this.updateCategories();
@@ -607,9 +602,9 @@ class TimeSeriesChart {
     }
 
     callbackZoom() {
-        appState[this.state].xmin = this.chart.scales.x.min;
-        appState[this.state].xmax = this.chart.scales.x.max;
-        fresh[this.fresh] = false;
+        appState[this.name].xmin = this.chart.scales.x.min;
+        appState[this.name].xmax = this.chart.scales.x.max;
+        fresh[this.name] = false;
         this.updateTimeUnit();
         this.updateChart();
         this.updateCategories();
@@ -617,8 +612,8 @@ class TimeSeriesChart {
     }
 
     callbackPan() {
-        appState[this.state].xmin = this.chart.scales.x.min;
-        appState[this.state].xmax = this.chart.scales.x.max;
+        appState[this.name].xmin = this.chart.scales.x.min;
+        appState[this.name].xmax = this.chart.scales.x.max;
         this.updateCategories();
         serializeStateToURL();
     }
@@ -971,14 +966,12 @@ function initializeUI() {
     filterFacilities();
 
     prodConfig = {
-        canvasId: 'productionChart',
+        name: 'productionChart',
         categories: PRODUCTION_CATEGORIES,
         colors: PRODUCTION_CATEGORY_COLORS,
         data: productionData,
-        state: "productionChart",
         selectedCategories: "selectedProductionCategories",
 
-        fresh: 'production',
         chartTitle: 'Energy production',
         yAxisTitle: 'Production (GWh)',
         beginAtZero: true,
@@ -993,14 +986,11 @@ function initializeUI() {
     }
 
     tradeConfig = {
-        canvasId: 'tradeChart',
+        name: 'tradeChart',
         categories: TRADE_CATEGORIES,
         colors: TRADE_CATEGORY_COLORS,
         data: tradeData,
-        state: "tradeChart",
         selectedCategories: "selectedTradeCategories",
-
-        fresh: 'trade',
 
         chartTitle: 'Energy trade (imports - exports)',
         yAxisTitle: 'Net (imports - exports) (GWh)',
