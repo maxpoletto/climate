@@ -290,8 +290,8 @@ class TimeSeriesChart {
         this.createChart();
         this.renderControls();
 
-        const min = Math.max(appState[this.state].xmin, new Date(config.startDate).getTime());
-        const max = Math.min(appState[this.state].xmax, new Date().getTime());
+        const min = Math.max(appState[this.state].xmin, this.dataMin);
+        const max = Math.min(appState[this.state].xmax, this.dataMax);
         appState[this.state].xmin = min;
         appState[this.state].xmax = max;
         this.chart.options.scales.x.min = min;
@@ -359,8 +359,8 @@ class TimeSeriesChart {
                         },
                         limits: {
                             x: {
-                                min: 'original',
-                                max: 'original',
+                                min: this.dataMin,
+                                max: this.dataMax,
                                 minRange: this.minRange
                             }
                         }
@@ -598,39 +598,28 @@ class TimeSeriesChart {
         appState[this.state].xmax = max;
         this.chart.options.scales.x.min = min;
         this.chart.options.scales.x.max = max;
-
-        if (this.chart.$zoom && this.chart.$zoom._originalOptions) {
-            // Crazy Claude thing to reset zoom limits. Not documented in the Chart.js docs.
-            if (!this.chart.$zoom._originalOptions.x) {
-                this.chart.$zoom._originalOptions.x = {};
-            }
-            this.chart.$zoom._originalOptions.x.min = min;
-            this.chart.$zoom._originalOptions.x.max = max;
-        }
-
-        fresh[this.fresh] = false; // Force update
+        fresh[this.fresh] = false;
         this.updateTimeUnit();
         this.updateChart();
         this.updateCategories();
-
         this.chart.resetZoom();
         serializeStateToURL();
     }
 
     callbackZoom() {
+        appState[this.state].xmin = this.chart.scales.x.min;
+        appState[this.state].xmax = this.chart.scales.x.max;
         fresh[this.fresh] = false;
         this.updateTimeUnit();
         this.updateChart();
         this.updateCategories();
-        appState[this.state].xmin = this.chart.scales.x.min;
-        appState[this.state].xmax = this.chart.scales.x.max;
         serializeStateToURL();
     }
 
     callbackPan() {
-        this.updateCategories();
         appState[this.state].xmin = this.chart.scales.x.min;
         appState[this.state].xmax = this.chart.scales.x.max;
+        this.updateCategories();
         serializeStateToURL();
     }
 
@@ -993,7 +982,6 @@ function initializeUI() {
         chartTitle: 'Energy production',
         yAxisTitle: 'Production (GWh)',
         beginAtZero: true,
-        startDate: '2015-01-01',
 
         categoryAggregator: productionCategoryAggregator,
         categoryValueElementId: 'prod-avg',
@@ -1017,7 +1005,6 @@ function initializeUI() {
         chartTitle: 'Energy trade (imports - exports)',
         yAxisTitle: 'Net (imports - exports) (GWh)',
         beginAtZero: false,
-        startDate: '2017-01-01',
 
         categoryAggregator: tradeCategoryAggregator,
         categoryValueElementId: 'trade-net',
