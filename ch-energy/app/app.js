@@ -130,12 +130,6 @@ const appState = {
     searchTokens: [],
     selectedFacilitiesCategories: null,
 
-    // Production mode state
-    selectedProductionCategories: null,
-
-    // Trade mode state
-    selectedTradeCategories: null,
-
     // Map view state
     mapView: {
         latitude: 46.8182,
@@ -146,11 +140,13 @@ const appState = {
     // Chart defaults, but overwritten by data and by URL state
     productionChart: {
         xmin: new Date('2015-01-01').getTime(),
-        xmax: Infinity
+        xmax: Infinity,
+        selectedCategories: null
     },
     tradeChart: {
         xmin: new Date('2017-01-01').getTime(),
-        xmax: Infinity
+        xmax: Infinity,
+        selectedCategories: null
     }
 };
 
@@ -226,14 +222,6 @@ function deserializeStateFromURL() {
         if (Array.isArray(state.searchTokens)) {
             appState.searchTokens = state.searchTokens.filter(t => typeof t === 'string');
         }
-        if (Array.isArray(state.selectedProductionCategories)) {
-            appState.selectedProductionCategories = state.selectedProductionCategories
-                .filter(c => typeof c === 'string' && PRODUCTION_CATEGORIES.includes(c));
-        }
-        if (Array.isArray(state.selectedTradeCategories)) {
-            appState.selectedTradeCategories = state.selectedTradeCategories
-                .filter(c => typeof c === 'string' && TRADE_CATEGORIES.includes(c));
-        }
         if (state.mapView && typeof state.mapView === 'object') {
             decodeFloat(state.mapView.latitude, (val) => appState.mapView.latitude = val, -90, 90);
             decodeFloat(state.mapView.longitude, (val) => appState.mapView.longitude = val, -180, 180);
@@ -242,10 +230,18 @@ function deserializeStateFromURL() {
         if (state.productionChart && typeof state.productionChart === 'object') {
             decodeFloat(state.productionChart.xmin, (val) => appState.productionChart.xmin = val, 0);
             decodeFloat(state.productionChart.xmax, (val) => appState.productionChart.xmax = val, appState.productionChart.xmin);
+            if (Array.isArray(state.productionChart.selectedCategories)) {
+                appState.productionChart.selectedCategories = state.productionChart.selectedCategories
+                    .filter(c => typeof c === 'string' && PRODUCTION_CATEGORIES.includes(c));
+            }
         }
         if (state.tradeChart && typeof state.tradeChart === 'object') {
             decodeFloat(state.tradeChart.xmin, (val) => appState.tradeChart.xmin = val, 0);
             decodeFloat(state.tradeChart.xmax, (val) => appState.tradeChart.xmax = val, appState.tradeChart.xmin);
+            if (Array.isArray(state.tradeChart.selectedCategories)) {
+                appState.tradeChart.selectedCategories = state.tradeChart.selectedCategories
+                    .filter(c => typeof c === 'string' && TRADE_CATEGORIES.includes(c));
+            }
         }
     } catch (error) {
         console.warn('Failed to deserialize state from URL:', error);
@@ -263,7 +259,6 @@ class TimeSeriesChart {
         this.colors = config.colors;
         this.data = config.data;
         this.chartType = config.chartType || 'bar';
-        this.selectedCategories = config.selectedCategories;
 
         this.minRange = config.minRange || 7 * 24 * 60 * 60 * 1000; // one week minimum
 
@@ -415,7 +410,7 @@ class TimeSeriesChart {
         allCheckbox.type = 'checkbox';
         allCheckbox.className = 'category-checkbox';
         allCheckbox.id = this.categoryCheckboxElementId + '-all';
-        allCheckbox.checked = appState[this.selectedCategories].length === this.categories.length;
+        allCheckbox.checked = appState[this.name].selectedCategories.length === this.categories.length;
         const allLabel = document.createElement('label');
         allLabel.htmlFor = this.categoryCheckboxElementId + '-all';
         allLabel.textContent = 'Select/Deselect All';
@@ -438,7 +433,7 @@ class TimeSeriesChart {
             checkbox.className = 'category-checkbox';
             checkbox.id = `${this.categoryCheckboxElementId}${index}`;
             checkbox.value = category;
-            checkbox.checked = appState[this.selectedCategories].includes(category);
+            checkbox.checked = appState[this.name].selectedCategories.includes(category);
 
             const label = document.createElement('label');
             label.className = 'category-label';
@@ -479,7 +474,7 @@ class TimeSeriesChart {
                 return;
             }
             element.textContent = averages[index].toFixed(1);
-            if (appState[this.selectedCategories].includes(category)) {
+            if (appState[this.name].selectedCategories.includes(category)) {
                 selectedTotal += averages[index];
             }
         });
@@ -539,7 +534,7 @@ class TimeSeriesChart {
         const aggregatedData = aggregateByTimeUnit(this.data, currentUnit);
 
         const datasets = [];
-        [...appState[this.selectedCategories]].reverse().forEach((category, _) => {
+        [...appState[this.name].selectedCategories].reverse().forEach((category, _) => {
             const categoryIndex = this.categories.indexOf(category);
             if (categoryIndex === -1) return;
             const color = this.colors[category] || [128, 128, 128];
@@ -569,13 +564,13 @@ class TimeSeriesChart {
             document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]`).forEach(cb => {
                 if (cb.id !== allCheckbox.id) cb.checked = checked;
             });
-            appState[this.selectedCategories] = checked ? [...this.categories] : [];
+            appState[this.name].selectedCategories = checked ? [...this.categories] : [];
         } else {
-            appState[this.selectedCategories] = Array
+            appState[this.name].selectedCategories = Array
                 .from(document.querySelectorAll(`#${this.categoryTableElementId} input[type="checkbox"]:not(#${this.categoryCheckboxElementId}-all):checked`))
                 .map(cb => cb.value);
             // Sync select-all checkbox
-            const allChecked = appState[this.selectedCategories].length === this.categories.length;
+            const allChecked = appState[this.name].selectedCategories.length === this.categories.length;
             allCheckbox.checked = allChecked;
         }
 
@@ -820,14 +815,14 @@ async function loadData() {
         deserializeStateFromURL();
 
         // Initialize with all categories on first load (=== null)
-        if (appState.selectedProductionCategories === null) {
-            appState.selectedProductionCategories = [...PRODUCTION_CATEGORIES];
+        if (appState.productionChart.selectedCategories === null) {
+            appState.productionChart.selectedCategories = [...PRODUCTION_CATEGORIES];
         }
         if (appState.selectedFacilitiesCategories === null) {
             appState.selectedFacilitiesCategories = [...facilities.categories];
         }
-        if (appState.selectedTradeCategories === null) {
-            appState.selectedTradeCategories = [...TRADE_CATEGORIES];
+        if (appState.tradeChart.selectedCategories === null) {
+            appState.tradeChart.selectedCategories = [...TRADE_CATEGORIES];
         }
 
         // Hide loading overlay after successful data load
@@ -961,7 +956,6 @@ function initializeUI() {
         categories: PRODUCTION_CATEGORIES,
         colors: PRODUCTION_CATEGORY_COLORS,
         data: productionData,
-        selectedCategories: "selectedProductionCategories",
 
         chartTitle: 'Energy production',
         yAxisTitle: 'Production (GWh)',
@@ -981,7 +975,6 @@ function initializeUI() {
         categories: TRADE_CATEGORIES,
         colors: TRADE_CATEGORY_COLORS,
         data: tradeData,
-        selectedCategories: "selectedTradeCategories",
 
         chartTitle: 'Energy trade (imports - exports)',
         yAxisTitle: 'Net (imports - exports) (GWh)',
